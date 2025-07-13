@@ -17,7 +17,7 @@
 
 ## Features
 
-- ✨ Fluffless PWA using Next 13
+- ✨ Fluffless PWA using Next 15
 - 🌗 Lovely night/day themes
 - 🦄 Easily removable [nice-to-haves](#use-only-what-you-need)
 - 📱 Native-like mobile experience
@@ -25,9 +25,11 @@
 
 ## Getting started
 
-1. [Use this template](https://github.com/mvllow/next-pwa-template/generate)
-2. Replace `public/images` with your own
-3. Enjoy ✨
+1. Clone this repo or use as a template
+2. Run `npm install` to install dependencies (npm is now the default package manager)
+3. Run `npm run dev` to start the development server
+4. Replace `public/images` with your own
+5. Enjoy ✨
 
 ## Use only what you need
 
@@ -38,10 +40,17 @@ Fluffless doesn't mean "start with nothing". The goal of this template is to be 
 - Typescript, made easy with Next.js
 - [tailwindcss](https://github.com/tailwindlabs/tailwindcss) for utility-first styling
 - [next-pwa](https://github.com/shadowwalker/next-pwa) for offline support
+- [@tailwindcss/postcss](https://www.npmjs.com/package/@tailwindcss/postcss) for Tailwind CSS 4+ PostCSS integration
 
 **Nice to haves**
 
 - [next-themes](https://github.com/pacocoursey/next-themes) or similar for low stress theming
+
+## Migration notes
+
+- The project is now standardized on npm (pnpm and lockfile removed)
+- All major dependencies (Next.js, React, Tailwind CSS, etc.) are updated to their latest versions as of July 2025
+- PostCSS config updated for Tailwind CSS 4+ compatibility
 
 ## Gallery
 
