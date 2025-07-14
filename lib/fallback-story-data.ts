@@ -60,7 +60,7 @@ export const fallbackStoryNodes: Record<string, StoryNode> = {
 		id: 'symbols_examined',
 		storyId: 'mystical-forest',
 		title: 'Ancient Knowledge',
-		text: 'The symbols begin to make sense as you study them. They tell of a guardian spirit trapped within, waiting for someone brave enough to free it. The symbols also warn of great danger.',
+		text: 'The symbols begin to make sense as you study them. They tell of a guardian spirit trapped within, waiting for someone brave enough to free it.\n\n[The symbols pulse with a warning energy]\n\nThe ancient script also warns of great danger that lies beyond the threshold.',
 		choices: [
 			{ id: 'door_open_cautious', text: 'Open the door carefully', nextNodeId: 'door_opened' },
 			{ id: 'spirit_call', text: 'Call out to the spirit', nextNodeId: 'spirit_responds' },
@@ -102,7 +102,7 @@ export const fallbackStoryNodes: Record<string, StoryNode> = {
 		id: 'spirit_responds',
 		storyId: 'mystical-forest',
 		title: 'The Guardian Awakens',
-		text: 'A ethereal voice responds to your call: "Mortal, you have read the ancient warnings. I am bound here by duty, but perhaps you can help me complete my purpose. Will you aid me?"',
+		text: 'A soft, ethereal voice echoes from within the door.\n\nGuardian Spirit: "Mortal, you have read the ancient warnings. I am bound here by duty, but perhaps you can help me complete my purpose."\n\nThe voice grows warmer, more hopeful.\n\nGuardian Spirit: "Will you aid me in protecting this realm?"',
 		choices: [
 			{ id: 'spirit_help', text: 'Offer to help the spirit', nextNodeId: 'spirit_helped' },
 			{ id: 'spirit_question', text: 'Ask about its purpose', nextNodeId: 'purpose_revealed' },
