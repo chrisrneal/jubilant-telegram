@@ -1,5 +1,6 @@
 import type { AppProps } from 'next/app'
 import { ThemeProvider } from 'next-themes'
+import { AuthProvider } from '@/lib/auth-context'
 import '@/styles/globals.css'
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -9,7 +10,9 @@ export default function App({ Component, pageProps }: AppProps) {
 			defaultTheme='system'
 			disableTransitionOnChange
 		>
-			<Component {...pageProps} />
+			<AuthProvider>
+				<Component {...pageProps} />
+			</AuthProvider>
 		</ThemeProvider>
 	)
 }

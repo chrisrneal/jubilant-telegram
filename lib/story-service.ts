@@ -206,6 +206,26 @@ export class StoryService {
 	}
 
 	/**
+	 * Create or get session for authenticated user
+	 */
+	static async getOrCreateUserSession(userId: string): Promise<string> {
+		// For authenticated users, use their user ID as the session identifier
+		const sessionId = `auth_${userId}`
+		
+		// Try to get existing session
+		let session = await this.getSession(sessionId)
+		if (!session) {
+			// Create new session for authenticated user
+			session = await this.createSession(sessionId, userId)
+		} else {
+			// Update last accessed time
+			await this.updateSession(sessionId)
+		}
+		
+		return sessionId
+	}
+
+	/**
 	 * Create or update game state
 	 */
 	static async saveGameState(sessionId: string, storyId: string, currentNodeId: string, progressData: Record<string, any> = {}): Promise<GameState | null> {

@@ -70,3 +70,20 @@ export interface UserAccount {
 export interface StoryNodeWithChoices extends StoryNode {
 	choices: Choice[]
 }
+
+// Auth-related types
+export interface AuthUser {
+	id: string
+	email?: string
+	user_metadata?: {
+		display_name?: string
+		avatar_url?: string
+	}
+}
+
+export interface AuthSession {
+	access_token: string
+	refresh_token: string
+	expires_in: number
+	user: AuthUser
+}
