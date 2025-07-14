@@ -12,8 +12,18 @@ export const supabase = isSupabaseConfigured
 	: null
 
 // Database types
+export interface Story {
+	id: string
+	title: string
+	description?: string
+	is_active: boolean
+	created_at?: string
+	updated_at?: string
+}
+
 export interface StoryNode {
 	id: string
+	story_id: string
 	title: string
 	text: string
 	is_ending?: boolean
@@ -28,6 +38,33 @@ export interface Choice {
 	next_node_id: string
 	order_index: number
 	created_at?: string
+}
+
+export interface UserSession {
+	id: string
+	user_id?: string | null
+	created_at?: string
+	last_accessed?: string
+	expires_at?: string
+}
+
+export interface GameState {
+	id: string
+	session_id: string
+	story_id: string
+	current_node_id: string
+	progress_data: Record<string, any>
+	created_at?: string
+	updated_at?: string
+}
+
+export interface UserAccount {
+	id: string
+	email?: string
+	username?: string
+	display_name?: string
+	created_at?: string
+	updated_at?: string
 }
 
 export interface StoryNodeWithChoices extends StoryNode {
