@@ -48,12 +48,50 @@ export interface UserSession {
 	expires_at?: string
 }
 
+// Enhanced progress data structure for comprehensive game state tracking
+export interface PlayerInventory {
+	[itemId: string]: {
+		name: string
+		quantity: number
+		acquiredAt: string
+		description?: string
+	}
+}
+
+export interface ChoiceRecord {
+	nodeId: string
+	choiceId: string
+	choiceText: string
+	nextNodeId: string
+	timestamp: string
+}
+
+export interface PlayerStats {
+	[statName: string]: {
+		value: number | string | boolean
+		lastUpdated: string
+	}
+}
+
+export interface ProgressData {
+	visitedScenarios: string[]
+	choiceHistory: ChoiceRecord[]
+	inventory: PlayerInventory
+	playerStats: PlayerStats
+	gameplayStats: {
+		startTime: string
+		totalChoicesMade: number
+		currentPlaySession: string
+	}
+	version: number // For schema versioning
+}
+
 export interface GameState {
 	id: string
 	session_id: string
 	story_id: string
 	current_node_id: string
-	progress_data: Record<string, any>
+	progress_data: ProgressData
 	created_at?: string
 	updated_at?: string
 }

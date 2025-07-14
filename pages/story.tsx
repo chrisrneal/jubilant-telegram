@@ -3,6 +3,7 @@ import Page from '@/components/page'
 import Section from '@/components/section'
 import { StoryService } from '@/lib/story-service'
 import { StoryNodeWithChoices, Story, UserSession, GameState } from '@/lib/supabase'
+import { GameStateManager } from '@/lib/game-state-manager'
 import { useAuth } from '@/lib/auth-context'
 
 export default function StoryPage() {
@@ -125,15 +126,20 @@ export default function StoryPage() {
 		setIsUsingSupabase(StoryService.isUsingSupabase())
 	}, [])
 
-	const handleChoice = async (nextNodeId: string) => {
-		if (!currentStory || !gameState) return
+	const handleChoice = async (nextNodeId: string, choiceId: string, choiceText: string) => {
+		if (!currentStory || !gameState || !currentNodeId) return
 
-		// Update game state with new node
+		// Update game state with enhanced choice tracking
 		const updatedGameState = await StoryService.saveGameState(
 			sessionId,
 			currentStory.id,
 			nextNodeId,
-			gameState.progress_data
+			undefined, // Let the service handle progress data updates
+			{
+				choiceId,
+				choiceText,
+				previousNodeId: currentNodeId
+			}
 		)
 
 		if (updatedGameState) {
@@ -306,7 +312,7 @@ export default function StoryPage() {
 						{currentNode.choices.map((choice) => (
 							<button
 								key={choice.id}
-								onClick={() => handleChoice(choice.next_node_id)}
+								onClick={() => handleChoice(choice.next_node_id, choice.id, choice.text)}
 								className="w-full text-left p-4 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg transition-colors duration-200 border border-zinc-300 dark:border-zinc-600"
 							>
 								<span className="text-zinc-800 dark:text-zinc-200 font-medium">
@@ -335,8 +341,47 @@ export default function StoryPage() {
 						</div>
 					)}
 
+					{/* Game progress indicators */}
+					{gameState && gameState.progress_data && GameStateManager.validateProgressData(gameState.progress_data) && (
+						<div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-700">
+							<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+								<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+									<p className="text-sm text-blue-800 dark:text-blue-200">
+										<strong>{GameStateManager.getTotalChoicesMade(gameState.progress_data)}</strong> choices made
+									</p>
+								</div>
+								<div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+									<p className="text-sm text-green-800 dark:text-green-200">
+										<strong>{gameState.progress_data.visitedScenarios.length}</strong> scenes explored
+									</p>
+								</div>
+								<div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3">
+									<p className="text-sm text-purple-800 dark:text-purple-200">
+										<strong>{GameStateManager.getGameplayDuration(gameState.progress_data)}min</strong> play time
+									</p>
+								</div>
+							</div>
+							
+							{/* Show inventory if player has items */}
+							{Object.keys(gameState.progress_data.inventory).length > 0 && (
+								<div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+									<p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+										<strong>🎒 Inventory:</strong>
+									</p>
+									<div className="flex flex-wrap gap-2">
+										{Object.entries(gameState.progress_data.inventory).map(([itemId, item]) => (
+											<span key={itemId} className="text-xs bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-2 py-1 rounded">
+												{item.name} ({item.quantity})
+											</span>
+										))}
+									</div>
+								</div>
+							)}
+						</div>
+					)}
+
 					{/* Game instructions */}
-					<div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-700">
+					<div className="mt-4">
 						<p className="text-sm text-zinc-600 dark:text-zinc-400 text-center">
 							{currentNode.is_ending ? 
 								'Your adventure is complete! Click above to start a new one.' :

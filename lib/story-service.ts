@@ -1,5 +1,6 @@
-import { supabase, isSupabaseConfigured, StoryNode, Choice, StoryNodeWithChoices, Story, UserSession, GameState } from './supabase'
+import { supabase, isSupabaseConfigured, StoryNode, Choice, StoryNodeWithChoices, Story, UserSession, GameState, ProgressData } from './supabase'
 import { fallbackStoryNodes, fallbackStories } from './fallback-story-data'
+import { GameStateManager } from './game-state-manager'
 
 export class StoryService {
 	/**
@@ -226,12 +227,65 @@ export class StoryService {
 	}
 
 	/**
-	 * Create or update game state
+	 * Create or update game state with enhanced tracking
 	 */
-	static async saveGameState(sessionId: string, storyId: string, currentNodeId: string, progressData: Record<string, any> = {}): Promise<GameState | null> {
+	static async saveGameState(
+		sessionId: string, 
+		storyId: string, 
+		currentNodeId: string, 
+		progressData?: ProgressData,
+		choiceDetails?: { choiceId: string, choiceText: string, previousNodeId: string }
+	): Promise<GameState | null> {
 		try {
 			// First try to get existing game state
 			const existingState = await this.getGameState(sessionId, storyId)
+			
+			let updatedProgressData: ProgressData
+			
+			if (existingState && existingState.progress_data) {
+				// Update existing progress data
+				updatedProgressData = GameStateManager.migrateProgressData(existingState.progress_data)
+				
+				// Record the choice if provided
+				if (choiceDetails) {
+					updatedProgressData = GameStateManager.recordChoice(
+						updatedProgressData,
+						choiceDetails.previousNodeId,
+						choiceDetails.choiceId,
+						choiceDetails.choiceText,
+						currentNodeId
+					)
+				}
+				
+				// Record visited scenario
+				updatedProgressData = GameStateManager.recordVisitedScenario(updatedProgressData, currentNodeId)
+				
+				// Merge any additional progress data provided
+				if (progressData) {
+					updatedProgressData = {
+						...updatedProgressData,
+						...progressData,
+						// Preserve critical tracking data
+						visitedScenarios: updatedProgressData.visitedScenarios,
+						choiceHistory: updatedProgressData.choiceHistory,
+						gameplayStats: updatedProgressData.gameplayStats
+					}
+				}
+			} else {
+				// Create new progress data
+				updatedProgressData = progressData || GameStateManager.createInitialProgressData(sessionId)
+				updatedProgressData = GameStateManager.recordVisitedScenario(updatedProgressData, currentNodeId)
+				
+				if (choiceDetails) {
+					updatedProgressData = GameStateManager.recordChoice(
+						updatedProgressData,
+						choiceDetails.previousNodeId,
+						choiceDetails.choiceId,
+						choiceDetails.choiceText,
+						currentNodeId
+					)
+				}
+			}
 			
 			if (existingState) {
 				// Update existing state
@@ -240,7 +294,10 @@ export class StoryService {
 					headers: {
 						'Content-Type': 'application/json',
 					},
-					body: JSON.stringify({ currentNodeId, progressData }),
+					body: JSON.stringify({ 
+						currentNodeId, 
+						progressData: updatedProgressData 
+					}),
 				})
 
 				const result = await response.json()
@@ -258,7 +315,12 @@ export class StoryService {
 					headers: {
 						'Content-Type': 'application/json',
 					},
-					body: JSON.stringify({ sessionId, storyId, currentNodeId, progressData }),
+					body: JSON.stringify({ 
+						sessionId, 
+						storyId, 
+						currentNodeId, 
+						progressData: updatedProgressData 
+					}),
 				})
 
 				const result = await response.json()
@@ -277,7 +339,7 @@ export class StoryService {
 	}
 
 	/**
-	 * Get game state for a session and story
+	 * Get game state for a session and story with validation
 	 */
 	static async getGameState(sessionId: string, storyId?: string): Promise<GameState | null> {
 		try {
@@ -294,7 +356,13 @@ export class StoryService {
 				return null
 			}
 
-			return result.gameState
+			const gameState = result.gameState
+			if (gameState && gameState.progress_data) {
+				// Validate and migrate progress data if needed
+				gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+			}
+
+			return gameState
 		} catch (error) {
 			console.error('Unexpected error fetching game state:', error)
 			return null
