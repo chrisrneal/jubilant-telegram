@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabase, isSupabaseConfigured, GameState } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured, GameState, ProgressData } from '@/lib/supabase'
+import { GameStateManager } from '@/lib/game-state-manager'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method === 'POST') {
@@ -16,12 +17,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 	try {
-		const { sessionId, storyId, currentNodeId, progressData = {} } = req.body
+		const { sessionId, storyId, currentNodeId, progressData } = req.body
 
 		if (!sessionId || !storyId || !currentNodeId) {
 			return res.status(400).json({ 
 				error: 'Session ID, story ID, and current node ID are required' 
 			})
+		}
+
+		// Validate and create proper progress data
+		let validProgressData: ProgressData
+		if (progressData) {
+			if (GameStateManager.validateProgressData(progressData)) {
+				validProgressData = progressData
+			} else {
+				console.warn('Invalid progress data provided, migrating...')
+				validProgressData = GameStateManager.migrateProgressData(progressData)
+			}
+		} else {
+			validProgressData = GameStateManager.createInitialProgressData(sessionId)
 		}
 
 		// If Supabase is not configured, return success (fallback mode)
@@ -32,7 +46,7 @@ async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 					session_id: sessionId,
 					story_id: storyId,
 					current_node_id: currentNodeId,
-					progress_data: progressData,
+					progress_data: validProgressData,
 					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString()
 				},
@@ -47,7 +61,7 @@ async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 					session_id: sessionId,
 					story_id: storyId,
 					current_node_id: currentNodeId,
-					progress_data: progressData
+					progress_data: validProgressData
 				}
 			])
 			.select()
@@ -95,7 +109,16 @@ async function getGameState(req: NextApiRequest, res: NextApiResponse) {
 		}
 
 		// Return the most recent game state, or null if none found
-		const gameState = data && data.length > 0 ? data[0] : null
+		let gameState = data && data.length > 0 ? data[0] : null
+		
+		// Validate and migrate progress data if needed
+		if (gameState && gameState.progress_data) {
+			if (!GameStateManager.validateProgressData(gameState.progress_data)) {
+				console.warn('Invalid progress data in stored state, migrating...')
+				gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+			}
+		}
+		
 		return res.status(200).json({ gameState })
 	} catch (error) {
 		console.error('Unexpected error fetching game state:', error)
@@ -116,13 +139,24 @@ async function updateGameState(req: NextApiRequest, res: NextApiResponse) {
 			return res.status(400).json({ error: 'Current node ID is required' })
 		}
 
+		// Validate progress data if provided
+		let validProgressData: ProgressData | undefined
+		if (progressData) {
+			if (GameStateManager.validateProgressData(progressData)) {
+				validProgressData = progressData
+			} else {
+				console.warn('Invalid progress data provided in update, migrating...')
+				validProgressData = GameStateManager.migrateProgressData(progressData)
+			}
+		}
+
 		// If Supabase is not configured, return success (fallback mode)
 		if (!isSupabaseConfigured || !supabase) {
 			return res.status(200).json({ 
 				gameState: { 
 					id: gameStateId,
 					current_node_id: currentNodeId,
-					progress_data: progressData || {},
+					progress_data: validProgressData || GameStateManager.createInitialProgressData('fallback'),
 					updated_at: new Date().toISOString()
 				},
 				fallback: true 
@@ -134,8 +168,8 @@ async function updateGameState(req: NextApiRequest, res: NextApiResponse) {
 			updated_at: new Date().toISOString()
 		}
 
-		if (progressData !== undefined) {
-			updateData.progress_data = progressData
+		if (validProgressData !== undefined) {
+			updateData.progress_data = validProgressData
 		}
 
 		const { data, error } = await supabase
