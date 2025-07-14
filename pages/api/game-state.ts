@@ -1,0 +1,158 @@
+import { NextApiRequest, NextApiResponse } from 'next'
+import { supabase, isSupabaseConfigured, GameState } from '@/lib/supabase'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+	if (req.method === 'POST') {
+		return createGameState(req, res)
+	} else if (req.method === 'GET') {
+		return getGameState(req, res)
+	} else if (req.method === 'PUT') {
+		return updateGameState(req, res)
+	} else {
+		res.setHeader('Allow', ['POST', 'GET', 'PUT'])
+		return res.status(405).json({ error: 'Method not allowed' })
+	}
+}
+
+async function createGameState(req: NextApiRequest, res: NextApiResponse) {
+	try {
+		const { sessionId, storyId, currentNodeId, progressData = {} } = req.body
+
+		if (!sessionId || !storyId || !currentNodeId) {
+			return res.status(400).json({ 
+				error: 'Session ID, story ID, and current node ID are required' 
+			})
+		}
+
+		// If Supabase is not configured, return success (fallback mode)
+		if (!isSupabaseConfigured || !supabase) {
+			return res.status(200).json({ 
+				gameState: { 
+					id: `fallback-${sessionId}-${storyId}`,
+					session_id: sessionId,
+					story_id: storyId,
+					current_node_id: currentNodeId,
+					progress_data: progressData,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString()
+				},
+				fallback: true 
+			})
+		}
+
+		const { data, error } = await supabase
+			.from('game_states')
+			.insert([
+				{
+					session_id: sessionId,
+					story_id: storyId,
+					current_node_id: currentNodeId,
+					progress_data: progressData
+				}
+			])
+			.select()
+			.single()
+
+		if (error) {
+			console.error('Error creating game state:', error)
+			return res.status(500).json({ error: 'Failed to create game state' })
+		}
+
+		return res.status(201).json({ gameState: data })
+	} catch (error) {
+		console.error('Unexpected error creating game state:', error)
+		return res.status(500).json({ error: 'Internal server error' })
+	}
+}
+
+async function getGameState(req: NextApiRequest, res: NextApiResponse) {
+	try {
+		const { sessionId, storyId } = req.query
+
+		if (!sessionId || typeof sessionId !== 'string') {
+			return res.status(400).json({ error: 'Session ID is required' })
+		}
+
+		// If Supabase is not configured, return null (fallback mode)
+		if (!isSupabaseConfigured || !supabase) {
+			return res.status(200).json({ gameState: null, fallback: true })
+		}
+
+		let query = supabase
+			.from('game_states')
+			.select('*')
+			.eq('session_id', sessionId)
+
+		if (storyId && typeof storyId === 'string') {
+			query = query.eq('story_id', storyId)
+		}
+
+		const { data, error } = await query.order('updated_at', { ascending: false })
+
+		if (error) {
+			console.error('Error fetching game state:', error)
+			return res.status(500).json({ error: 'Failed to fetch game state' })
+		}
+
+		// Return the most recent game state, or null if none found
+		const gameState = data && data.length > 0 ? data[0] : null
+		return res.status(200).json({ gameState })
+	} catch (error) {
+		console.error('Unexpected error fetching game state:', error)
+		return res.status(500).json({ error: 'Internal server error' })
+	}
+}
+
+async function updateGameState(req: NextApiRequest, res: NextApiResponse) {
+	try {
+		const { gameStateId } = req.query
+		const { currentNodeId, progressData } = req.body
+
+		if (!gameStateId || typeof gameStateId !== 'string') {
+			return res.status(400).json({ error: 'Game state ID is required' })
+		}
+
+		if (!currentNodeId) {
+			return res.status(400).json({ error: 'Current node ID is required' })
+		}
+
+		// If Supabase is not configured, return success (fallback mode)
+		if (!isSupabaseConfigured || !supabase) {
+			return res.status(200).json({ 
+				gameState: { 
+					id: gameStateId,
+					current_node_id: currentNodeId,
+					progress_data: progressData || {},
+					updated_at: new Date().toISOString()
+				},
+				fallback: true 
+			})
+		}
+
+		const updateData: any = {
+			current_node_id: currentNodeId,
+			updated_at: new Date().toISOString()
+		}
+
+		if (progressData !== undefined) {
+			updateData.progress_data = progressData
+		}
+
+		const { data, error } = await supabase
+			.from('game_states')
+			.update(updateData)
+			.eq('id', gameStateId)
+			.select()
+			.single()
+
+		if (error) {
+			console.error('Error updating game state:', error)
+			return res.status(500).json({ error: 'Failed to update game state' })
+		}
+
+		return res.status(200).json({ gameState: data })
+	} catch (error) {
+		console.error('Unexpected error updating game state:', error)
+		return res.status(500).json({ error: 'Internal server error' })
+	}
+}
