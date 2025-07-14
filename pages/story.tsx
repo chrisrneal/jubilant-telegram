@@ -3,6 +3,7 @@ import Page from '@/components/page'
 import Section from '@/components/section'
 import { StoryService } from '@/lib/story-service'
 import { StoryNodeWithChoices, Story, UserSession, GameState } from '@/lib/supabase'
+import { useAuth } from '@/lib/auth-context'
 
 export default function StoryPage() {
 	const [currentStory, setCurrentStory] = useState<Story | null>(null)
@@ -13,6 +14,8 @@ export default function StoryPage() {
 	const [isUsingSupabase, setIsUsingSupabase] = useState(false)
 	const [sessionId, setSessionId] = useState<string>('')
 	const [gameState, setGameState] = useState<GameState | null>(null)
+	
+	const { user, isAuthenticated, loading: authLoading } = useAuth()
 
 	// Initialize session and story on component mount
 	useEffect(() => {
@@ -21,14 +24,23 @@ export default function StoryPage() {
 			setError(null)
 			
 			try {
-				// Get or create session ID
-				const newSessionId = StoryService.getOrCreateSessionId()
+				let newSessionId: string
+
+				// Handle authenticated vs anonymous users
+				if (isAuthenticated && user) {
+					// For authenticated users, create a user-specific session
+					newSessionId = await StoryService.getOrCreateUserSession(user.id)
+				} else {
+					// For anonymous users, use the existing localStorage approach
+					newSessionId = StoryService.getOrCreateSessionId()
+				}
+
 				setSessionId(newSessionId)
 
 				// Try to get existing session or create new one
 				let session = await StoryService.getSession(newSessionId)
 				if (!session) {
-					session = await StoryService.createSession(newSessionId)
+					session = await StoryService.createSession(newSessionId, user?.id)
 				}
 
 				if (session) {
@@ -76,8 +88,11 @@ export default function StoryPage() {
 			}
 		}
 
-		initializeSession()
-	}, [])
+		// Only initialize if auth is not loading
+		if (!authLoading) {
+			initializeSession()
+		}
+	}, [isAuthenticated, user, authLoading])
 
 	// Load story node when current node changes
 	useEffect(() => {
@@ -152,7 +167,8 @@ export default function StoryPage() {
 		}
 	}
 
-	if (loading) {
+	// Show loading while auth is loading
+	if (authLoading || loading) {
 		return (
 			<Page title="Adventure">
 				<Section>
@@ -231,6 +247,24 @@ export default function StoryPage() {
 							<div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
 								<p className="text-sm text-amber-800 dark:text-amber-200">
 									📊 Using fallback story data. Configure Supabase environment variables to use database.
+								</p>
+							</div>
+						)}
+						
+						{/* Authentication status */}
+						{isUsingSupabase && (
+							<div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+								<p className="text-sm text-green-800 dark:text-green-200">
+									{isAuthenticated && user ? (
+										<>
+											🔐 Signed in as <strong>{user.user_metadata?.display_name || user.email}</strong> - 
+											Your progress is saved to your account
+										</>
+									) : (
+										<>
+											👤 Playing as guest - Sign in to save progress across devices
+										</>
+									)}
 								</p>
 							</div>
 						)}
@@ -318,6 +352,11 @@ export default function StoryPage() {
 							{gameState && (
 								<p className="text-xs text-purple-600 dark:text-purple-400">
 									💾 Progress auto-saved
+								</p>
+							)}
+							{isAuthenticated && (
+								<p className="text-xs text-blue-600 dark:text-blue-400">
+									🔐 Account linked
 								</p>
 							)}
 						</div>
