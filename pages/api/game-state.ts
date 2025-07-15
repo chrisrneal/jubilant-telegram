@@ -40,6 +40,7 @@ async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 
 		// If Supabase is not configured, return success (fallback mode)
 		if (!isSupabaseConfigured || !supabase) {
+			console.log('Using fallback mode - Supabase not configured')
 			return res.status(200).json({ 
 				gameState: { 
 					id: `fallback-${sessionId}-${storyId}`,
@@ -54,18 +55,55 @@ async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 			})
 		}
 
-		const { data, error } = await supabase
-			.from('game_states')
-			.insert([
-				{
+		// Try to use Supabase database, but fall back on any error
+		try {
+			const { data, error } = await supabase
+				.from('game_states')
+				.insert([
+					{
+						session_id: sessionId,
+						story_id: storyId,
+						current_node_id: currentNodeId,
+						progress_data: validProgressData
+					}
+				])
+				.select()
+				.single()
+
+			if (error) {
+				console.warn('Supabase error, falling back to local mode:', error)
+				// Fall back to local mode
+				return res.status(200).json({ 
+					gameState: { 
+						id: `fallback-${sessionId}-${storyId}`,
+						session_id: sessionId,
+						story_id: storyId,
+						current_node_id: currentNodeId,
+						progress_data: validProgressData,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString()
+					},
+					fallback: true 
+				})
+			}
+
+			return res.status(201).json({ gameState: data })
+		} catch (networkError) {
+			console.warn('Network error connecting to Supabase, falling back to local mode:', networkError)
+			// Fall back to local mode on network errors
+			return res.status(200).json({ 
+				gameState: { 
+					id: `fallback-${sessionId}-${storyId}`,
 					session_id: sessionId,
 					story_id: storyId,
 					current_node_id: currentNodeId,
-					progress_data: validProgressData
-				}
-			])
-			.select()
-			.single()
+					progress_data: validProgressData,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString()
+				},
+				fallback: true 
+			})
+		}
 
 		if (error) {
 			console.error('Error creating game state:', error)
@@ -90,30 +128,35 @@ async function getGameState(req: NextApiRequest, res: NextApiResponse) {
 				return res.status(200).json({ gameState: null, fallback: true })
 			}
 
-			const { data, error } = await supabase
-				.from('game_states')
-				.select('*')
-				.eq('id', gameStateId)
-				.single()
+			try {
+				const { data, error } = await supabase
+					.from('game_states')
+					.select('*')
+					.eq('id', gameStateId)
+					.single()
 
-			if (error) {
-				if (error.code === 'PGRST116') { // Not found
-					return res.status(404).json({ error: 'Game state not found' })
+				if (error) {
+					if (error.code === 'PGRST116') { // Not found
+						return res.status(404).json({ error: 'Game state not found' })
+					}
+					console.warn('Supabase error fetching game state by ID, falling back:', error)
+					return res.status(200).json({ gameState: null, fallback: true })
 				}
-				console.error('Error fetching game state by ID:', error)
-				return res.status(500).json({ error: 'Failed to fetch game state' })
-			}
 
-			// Validate and migrate progress data if needed
-			let gameState = data
-			if (gameState && gameState.progress_data) {
-				if (!GameStateManager.validateProgressData(gameState.progress_data)) {
-					console.warn('Invalid progress data in stored state, migrating...')
-					gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+				// Validate and migrate progress data if needed
+				let gameState = data
+				if (gameState && gameState.progress_data) {
+					if (!GameStateManager.validateProgressData(gameState.progress_data)) {
+						console.warn('Invalid progress data in stored state, migrating...')
+						gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+					}
 				}
+				
+				return res.status(200).json({ gameState })
+			} catch (networkError) {
+				console.warn('Network error fetching game state by ID, falling back:', networkError)
+				return res.status(200).json({ gameState: null, fallback: true })
 			}
-			
-			return res.status(200).json({ gameState })
 		}
 
 		// Original logic for session-based lookup
@@ -126,34 +169,39 @@ async function getGameState(req: NextApiRequest, res: NextApiResponse) {
 			return res.status(200).json({ gameState: null, fallback: true })
 		}
 
-		let query = supabase
-			.from('game_states')
-			.select('*')
-			.eq('session_id', sessionId)
+		try {
+			let query = supabase
+				.from('game_states')
+				.select('*')
+				.eq('session_id', sessionId)
 
-		if (storyId && typeof storyId === 'string') {
-			query = query.eq('story_id', storyId)
-		}
-
-		const { data, error } = await query.order('updated_at', { ascending: false })
-
-		if (error) {
-			console.error('Error fetching game state:', error)
-			return res.status(500).json({ error: 'Failed to fetch game state' })
-		}
-
-		// Return the most recent game state, or null if none found
-		let gameState = data && data.length > 0 ? data[0] : null
-		
-		// Validate and migrate progress data if needed
-		if (gameState && gameState.progress_data) {
-			if (!GameStateManager.validateProgressData(gameState.progress_data)) {
-				console.warn('Invalid progress data in stored state, migrating...')
-				gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+			if (storyId && typeof storyId === 'string') {
+				query = query.eq('story_id', storyId)
 			}
+
+			const { data, error } = await query.order('updated_at', { ascending: false })
+
+			if (error) {
+				console.warn('Supabase error fetching game state, falling back:', error)
+				return res.status(200).json({ gameState: null, fallback: true })
+			}
+
+			// Return the most recent game state, or null if none found
+			let gameState = data && data.length > 0 ? data[0] : null
+			
+			// Validate and migrate progress data if needed
+			if (gameState && gameState.progress_data) {
+				if (!GameStateManager.validateProgressData(gameState.progress_data)) {
+					console.warn('Invalid progress data in stored state, migrating...')
+					gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+				}
+			}
+			
+			return res.status(200).json({ gameState })
+		} catch (networkError) {
+			console.warn('Network error fetching game state, falling back:', networkError)
+			return res.status(200).json({ gameState: null, fallback: true })
 		}
-		
-		return res.status(200).json({ gameState })
 	} catch (error) {
 		console.error('Unexpected error fetching game state:', error)
 		return res.status(500).json({ error: 'Internal server error' })

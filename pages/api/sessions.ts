@@ -82,21 +82,54 @@ async function getSession(req: NextApiRequest, res: NextApiResponse) {
 			})
 		}
 
-		const { data, error } = await supabase
-			.from('user_sessions')
-			.select('*')
-			.eq('id', sessionId)
-			.single()
+		try {
+			const { data, error } = await supabase
+				.from('user_sessions')
+				.select('*')
+				.eq('id', sessionId)
+				.single()
 
-		if (error) {
-			if (error.code === 'PGRST116') { // Not found
-				return res.status(404).json({ error: 'Session not found' })
+			if (error) {
+				if (error.code === 'PGRST116') { // Not found
+					console.warn('Session not found, falling back')
+					return res.status(200).json({ 
+						session: { 
+							id: sessionId, 
+							user_id: null,
+							created_at: new Date().toISOString(),
+							last_accessed: new Date().toISOString(),
+							expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+						},
+						fallback: true 
+					})
+				}
+				console.warn('Supabase error fetching session, falling back:', error)
+				return res.status(200).json({ 
+					session: { 
+						id: sessionId, 
+						user_id: null,
+						created_at: new Date().toISOString(),
+						last_accessed: new Date().toISOString(),
+						expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+					},
+					fallback: true 
+				})
 			}
-			console.error('Error fetching session:', error)
-			return res.status(500).json({ error: 'Failed to fetch session' })
-		}
 
-		return res.status(200).json({ session: data })
+			return res.status(200).json({ session: data })
+		} catch (networkError) {
+			console.warn('Network error fetching session, falling back:', networkError)
+			return res.status(200).json({ 
+				session: { 
+					id: sessionId, 
+					user_id: null,
+					created_at: new Date().toISOString(),
+					last_accessed: new Date().toISOString(),
+					expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+				},
+				fallback: true 
+			})
+		}
 	} catch (error) {
 		console.error('Unexpected error fetching session:', error)
 		return res.status(500).json({ error: 'Internal server error' })
