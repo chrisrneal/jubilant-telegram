@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
 import Page from '@/components/page'
 import Section from '@/components/section'
 import StoryContent from '@/components/story-content'
@@ -8,8 +9,12 @@ import { StoryService } from '@/lib/story-service'
 import { StoryNodeWithChoices, Story, UserSession, GameState } from '@/lib/supabase'
 import { GameStateManager } from '@/lib/game-state-manager'
 import { useAuth } from '@/lib/auth-context'
+import Link from 'next/link'
 
 export default function StoryPage() {
+	const router = useRouter()
+	const { adventure: adventureId } = router.query
+	
 	const [currentStory, setCurrentStory] = useState<Story | null>(null)
 	const [currentNodeId, setCurrentNodeId] = useState('start')
 	const [currentNode, setCurrentNode] = useState<StoryNodeWithChoices | null>(null)
@@ -20,6 +25,7 @@ export default function StoryPage() {
 	const [gameState, setGameState] = useState<GameState | null>(null)
 	const [animationsEnabled, setAnimationsEnabled] = useState(true)
 	const [storyKey, setStoryKey] = useState(0) // Key to force re-render for animations
+	const [isSpecificAdventure, setIsSpecificAdventure] = useState(false)
 	
 	const { user, isAuthenticated, loading: authLoading } = useAuth()
 
@@ -31,60 +37,84 @@ export default function StoryPage() {
 			
 			try {
 				let newSessionId: string
+				let specificAdventure = false
 
-				// Handle authenticated vs anonymous users
-				if (isAuthenticated && user) {
-					// For authenticated users, create a user-specific session
-					newSessionId = await StoryService.getOrCreateUserSession(user.id)
+				// Check if we're loading a specific adventure
+				if (adventureId && typeof adventureId === 'string') {
+					// Load specific adventure by game state ID
+					const gameStateResponse = await fetch(`/api/game-state?gameStateId=${encodeURIComponent(adventureId)}`)
+					const gameStateResult = await gameStateResponse.json()
+					
+					if (gameStateResponse.ok && gameStateResult.gameState) {
+						const existingGameState = gameStateResult.gameState
+						newSessionId = existingGameState.session_id
+						setGameState(existingGameState)
+						setCurrentNodeId(existingGameState.current_node_id)
+						specificAdventure = true
+						setIsSpecificAdventure(true)
+						
+						// Load the story for this adventure
+						const stories = await StoryService.getStories()
+						const story = stories.find(s => s.id === existingGameState.story_id)
+						setCurrentStory(story || null)
+					} else {
+						setError('Adventure not found')
+						return
+					}
 				} else {
-					// For anonymous users, use the existing localStorage approach
-					newSessionId = StoryService.getOrCreateSessionId()
+					// Regular session initialization
+					if (isAuthenticated && user) {
+						newSessionId = await StoryService.getOrCreateUserSession(user.id)
+					} else {
+						newSessionId = StoryService.getOrCreateSessionId()
+					}
+
+					setSessionId(newSessionId)
+
+					// Try to get existing session or create new one
+					let session = await StoryService.getSession(newSessionId)
+					if (!session) {
+						session = await StoryService.createSession(newSessionId, user?.id)
+					}
+
+					if (session) {
+						await StoryService.updateSession(newSessionId)
+					}
+
+					// Try to get existing game state first
+					const existingGameState = await StoryService.getGameState(newSessionId)
+					
+					if (existingGameState) {
+						// Resume existing game
+						setGameState(existingGameState)
+						setCurrentNodeId(existingGameState.current_node_id)
+						
+						// Load the story for the existing game state
+						const stories = await StoryService.getStories()
+						const story = stories.find(s => s.id === existingGameState.story_id)
+						setCurrentStory(story || null)
+					} else {
+						// Start new game with random story
+						const randomStory = await StoryService.getRandomStory()
+						if (randomStory) {
+							setCurrentStory(randomStory)
+							setCurrentNodeId('start')
+							
+							// Create initial game state
+							const newGameState = await StoryService.saveGameState(
+								newSessionId, 
+								randomStory.id, 
+								'start'
+							)
+							setGameState(newGameState)
+						} else {
+							setError('No stories available')
+							return
+						}
+					}
 				}
 
 				setSessionId(newSessionId)
-
-				// Try to get existing session or create new one
-				let session = await StoryService.getSession(newSessionId)
-				if (!session) {
-					session = await StoryService.createSession(newSessionId, user?.id)
-				}
-
-				if (session) {
-					// Update session last accessed time
-					await StoryService.updateSession(newSessionId)
-				}
-
-				// Try to get existing game state first
-				const existingGameState = await StoryService.getGameState(newSessionId)
-				
-				if (existingGameState) {
-					// Resume existing game
-					setGameState(existingGameState)
-					setCurrentNodeId(existingGameState.current_node_id)
-					
-					// Load the story for the existing game state
-					const stories = await StoryService.getStories()
-					const story = stories.find(s => s.id === existingGameState.story_id)
-					setCurrentStory(story || null)
-				} else {
-					// Start new game with random story
-					const randomStory = await StoryService.getRandomStory()
-					if (randomStory) {
-						setCurrentStory(randomStory)
-						setCurrentNodeId('start')
-						
-						// Create initial game state
-						const newGameState = await StoryService.saveGameState(
-							newSessionId, 
-							randomStory.id, 
-							'start'
-						)
-						setGameState(newGameState)
-					} else {
-						setError('No stories available')
-						return
-					}
-				}
 
 			} catch (err) {
 				console.error('Error initializing session:', err)
@@ -94,11 +124,11 @@ export default function StoryPage() {
 			}
 		}
 
-		// Only initialize if auth is not loading
-		if (!authLoading) {
+		// Only initialize if auth is not loading and router is ready
+		if (!authLoading && router.isReady) {
 			initializeSession()
 		}
-	}, [isAuthenticated, user, authLoading])
+	}, [isAuthenticated, user, authLoading, router.isReady, adventureId])
 
 	// Load story node when current node changes
 	useEffect(() => {
@@ -218,6 +248,12 @@ export default function StoryPage() {
 							>
 								New Adventure
 							</button>
+							<Link
+								href="/adventures"
+								className="inline-block px-4 py-2 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+							>
+								My Adventures
+							</Link>
 						</div>
 					</div>
 				</Section>
@@ -246,6 +282,12 @@ export default function StoryPage() {
 							>
 								New Adventure
 							</button>
+							<Link
+								href="/adventures"
+								className="inline-block px-4 py-2 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+							>
+								My Adventures
+							</Link>
 						</div>
 					</div>
 				</Section>
@@ -257,6 +299,16 @@ export default function StoryPage() {
 		<Page title="Adventure">
 			<Section>
 				<div className="max-w-4xl mx-auto">
+					{/* Navigation */}
+					<div className="mb-4">
+						<Link
+							href="/adventures"
+							className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
+						>
+							← My Adventures
+						</Link>
+					</div>
+
 					{/* Data source and session info */}
 					<div className="mb-4 space-y-2">
 						{!isUsingSupabase && (
@@ -287,17 +339,36 @@ export default function StoryPage() {
 						
 						{currentStory && gameState && (
 							<div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-								<p className="text-sm text-blue-800 dark:text-blue-200">
-									📖 Playing: <strong>{currentStory.title}</strong> 
-									{gameState && !isUsingSupabase && (
-										<span className="ml-2">(Session: {sessionId.slice(-8)})</span>
+								<div className="flex items-center justify-between">
+									<div>
+										<p className="text-sm text-blue-800 dark:text-blue-200">
+											📖 Playing: <strong>{currentStory.title}</strong> 
+											{gameState && !isUsingSupabase && (
+												<span className="ml-2">(Session: {sessionId.slice(-8)})</span>
+											)}
+											{isSpecificAdventure && (
+												<span className="ml-2 px-2 py-1 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">
+													Specific Adventure
+												</span>
+											)}
+										</p>
+										{currentStory.description && (
+											<p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+												{currentStory.description}
+											</p>
+										)}
+									</div>
+									{isSpecificAdventure && (
+										<div className="flex gap-2">
+											<Link
+												href={`/adventures/${gameState?.id}/history`}
+												className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+											>
+												View History
+											</Link>
+										</div>
 									)}
-								</p>
-								{currentStory.description && (
-									<p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
-										{currentStory.description}
-									</p>
-								)}
+								</div>
 							</div>
 						)}
 					</div>
@@ -335,13 +406,21 @@ export default function StoryPage() {
 									✨ Chapter Complete ✨
 								</p>
 							</div>
-							<div className="text-center">
+							<div className="text-center space-x-4">
 								<button
 									onClick={handleRestartGame}
 									className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
 								>
 									Start New Adventure
 								</button>
+								{isSpecificAdventure && (
+									<Link
+										href={`/adventures/${gameState?.id}/history`}
+										className="inline-block px-6 py-3 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium rounded-lg transition-colors"
+									>
+										View Complete History
+									</Link>
+								)}
 							</div>
 						</div>
 					)}
