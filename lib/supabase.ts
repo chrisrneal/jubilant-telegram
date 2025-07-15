@@ -48,6 +48,25 @@ export interface UserSession {
 	expires_at?: string
 }
 
+export interface Adventure {
+	id: string
+	user_id?: string | null
+	session_id: string
+	story_id: string
+	title: string
+	status: 'active' | 'completed' | 'abandoned'
+	started_at: string
+	completed_at?: string
+	last_played_at: string
+	current_node_id: string
+	progress_summary?: {
+		totalChoices: number
+		scenesExplored: number
+		playTime: number
+		completion_percentage?: number
+	}
+}
+
 // Enhanced progress data structure for comprehensive game state tracking
 export interface PlayerInventory {
 	[itemId: string]: {

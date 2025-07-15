@@ -81,8 +81,42 @@ async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 
 async function getGameState(req: NextApiRequest, res: NextApiResponse) {
 	try {
-		const { sessionId, storyId } = req.query
+		const { sessionId, storyId, gameStateId } = req.query
 
+		// If getting by game state ID (for specific adventure)
+		if (gameStateId && typeof gameStateId === 'string') {
+			// If Supabase is not configured, return null (fallback mode)
+			if (!isSupabaseConfigured || !supabase) {
+				return res.status(200).json({ gameState: null, fallback: true })
+			}
+
+			const { data, error } = await supabase
+				.from('game_states')
+				.select('*')
+				.eq('id', gameStateId)
+				.single()
+
+			if (error) {
+				if (error.code === 'PGRST116') { // Not found
+					return res.status(404).json({ error: 'Game state not found' })
+				}
+				console.error('Error fetching game state by ID:', error)
+				return res.status(500).json({ error: 'Failed to fetch game state' })
+			}
+
+			// Validate and migrate progress data if needed
+			let gameState = data
+			if (gameState && gameState.progress_data) {
+				if (!GameStateManager.validateProgressData(gameState.progress_data)) {
+					console.warn('Invalid progress data in stored state, migrating...')
+					gameState.progress_data = GameStateManager.migrateProgressData(gameState.progress_data)
+				}
+			}
+			
+			return res.status(200).json({ gameState })
+		}
+
+		// Original logic for session-based lookup
 		if (!sessionId || typeof sessionId !== 'string') {
 			return res.status(400).json({ error: 'Session ID is required' })
 		}
