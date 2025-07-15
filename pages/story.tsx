@@ -428,6 +428,39 @@ export default function StoryPage() {
 					{/* Game progress indicators */}
 					{gameState && gameState.progress_data && GameStateManager.validateProgressData(gameState.progress_data) && (
 						<div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-700">
+							{/* Party Information */}
+							{GameStateManager.hasPartyConfiguration(gameState.progress_data) && (
+								<div className="mb-6">
+									<h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+										🏰 Your Party
+									</h3>
+									<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+										{GameStateManager.getPartyConfiguration(gameState.progress_data)!.members.map((member, index) => (
+											<div key={member.id} className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+												<div className="text-sm">
+													<div className="font-semibold text-amber-800 dark:text-amber-200">
+														{member.name}
+													</div>
+													<div className="text-amber-600 dark:text-amber-300 text-xs">
+														{member.class.name} (Lvl {member.level})
+													</div>
+													<div className="flex flex-wrap gap-1 mt-2">
+														{member.class.abilities.slice(0, 2).map((ability, abilityIndex) => (
+															<span 
+																key={abilityIndex}
+																className="text-xs bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-1 py-0.5 rounded"
+															>
+																{ability}
+															</span>
+														))}
+													</div>
+												</div>
+											</div>
+										))}
+									</div>
+								</div>
+							)}
+
 							<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
 								<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
 									<p className="text-sm text-blue-800 dark:text-blue-200">

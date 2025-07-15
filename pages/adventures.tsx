@@ -1,17 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import Page from '@/components/page'
 import Section from '@/components/section'
-import { Adventure, Story } from '@/lib/supabase'
+import PartyCreation from '@/components/party-creation'
+import { Adventure, Story, PartyConfiguration } from '@/lib/supabase'
 import { StoryService } from '@/lib/story-service'
+import { GameStateManager } from '@/lib/game-state-manager'
 import { useAuth } from '@/lib/auth-context'
 
 export default function AdventuresPage() {
+	const router = useRouter()
 	const [adventures, setAdventures] = useState<Adventure[]>([])
 	const [stories, setStories] = useState<Story[]>([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [isCreating, setIsCreating] = useState(false)
+	const [showPartyCreation, setShowPartyCreation] = useState(false)
+	const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null)
 	
 	const { user, isAuthenticated, loading: authLoading } = useAuth()
 
@@ -61,7 +67,7 @@ export default function AdventuresPage() {
 		}
 	}
 
-	const createNewAdventure = async (storyId: string) => {
+	const createNewAdventure = async (storyId: string, party?: PartyConfiguration) => {
 		try {
 			setIsCreating(true)
 			setError(null)
@@ -74,7 +80,8 @@ export default function AdventuresPage() {
 				body: JSON.stringify({
 					userId: user?.id,
 					storyId,
-					title: story ? `${story.title} - ${new Date().toLocaleDateString()}` : 'New Adventure'
+					title: story ? `${story.title} - ${new Date().toLocaleDateString()}` : 'New Adventure',
+					party // Include party configuration
 				})
 			})
 
@@ -84,14 +91,34 @@ export default function AdventuresPage() {
 				throw new Error(result.error || 'Failed to create adventure')
 			}
 
-			// Refresh adventures list
-			await loadAdventures()
+			// Navigate to the new adventure
+			router.push(`/story?adventure=${result.adventure.id}`)
 		} catch (err) {
 			console.error('Error creating adventure:', err)
 			setError(err instanceof Error ? err.message : 'Failed to create adventure')
 		} finally {
 			setIsCreating(false)
 		}
+	}
+
+	const handleStartAdventure = (storyId: string) => {
+		setSelectedStoryId(storyId)
+		setShowPartyCreation(true)
+		setError(null)
+	}
+
+	const handlePartyCreated = (party: PartyConfiguration) => {
+		if (selectedStoryId) {
+			createNewAdventure(selectedStoryId, party)
+		}
+		setShowPartyCreation(false)
+		setSelectedStoryId(null)
+	}
+
+	const handleCancelPartyCreation = () => {
+		setShowPartyCreation(false)
+		setSelectedStoryId(null)
+		setError(null)
 	}
 
 	const getStatusBadge = (status: string) => {
@@ -116,6 +143,20 @@ export default function AdventuresPage() {
 						<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
 						<p className="mt-4 text-zinc-600 dark:text-zinc-400">Loading your adventures...</p>
 					</div>
+				</Section>
+			</Page>
+		)
+	}
+
+	// Show party creation screen
+	if (showPartyCreation) {
+		return (
+			<Page title="Create Your Party">
+				<Section>
+					<PartyCreation
+						onPartyCreated={handlePartyCreated}
+						onCancel={handleCancelPartyCreation}
+					/>
 				</Section>
 			</Page>
 		)
@@ -175,7 +216,7 @@ export default function AdventuresPage() {
 										</p>
 									)}
 									<button
-										onClick={() => createNewAdventure(story.id)}
+										onClick={() => handleStartAdventure(story.id)}
 										disabled={isCreating}
 										className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
 									>
