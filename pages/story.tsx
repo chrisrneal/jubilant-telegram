@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import Page from '@/components/page'
 import Section from '@/components/section'
+import StoryContent from '@/components/story-content'
+import StoryChoices from '@/components/story-choices'
+import AnimationControls from '@/components/animation-controls'
 import { StoryService } from '@/lib/story-service'
 import { StoryNodeWithChoices, Story, UserSession, GameState } from '@/lib/supabase'
 import { GameStateManager } from '@/lib/game-state-manager'
@@ -15,6 +18,8 @@ export default function StoryPage() {
 	const [isUsingSupabase, setIsUsingSupabase] = useState(false)
 	const [sessionId, setSessionId] = useState<string>('')
 	const [gameState, setGameState] = useState<GameState | null>(null)
+	const [animationsEnabled, setAnimationsEnabled] = useState(true)
+	const [storyKey, setStoryKey] = useState(0) // Key to force re-render for animations
 	
 	const { user, isAuthenticated, loading: authLoading } = useAuth()
 
@@ -146,6 +151,8 @@ export default function StoryPage() {
 			setGameState(updatedGameState)
 		}
 
+		// Force re-render with animations by updating the story key
+		setStoryKey(prev => prev + 1)
 		setCurrentNodeId(nextNodeId)
 	}
 
@@ -166,6 +173,9 @@ export default function StoryPage() {
 					'start'
 				)
 				setGameState(newGameState)
+				
+				// Force re-render with animations
+				setStoryKey(prev => prev + 1)
 			}
 		} catch (err) {
 			console.error('Error restarting game:', err)
@@ -292,35 +302,30 @@ export default function StoryPage() {
 						)}
 					</div>
 
-					{/* Story Title */}
-					<h2 className="text-2xl font-bold text-zinc-800 dark:text-zinc-200 mb-6">
-						{currentNode.title}
-					</h2>
-
-					{/* Story Text */}
-					<div className="bg-white dark:bg-zinc-800 rounded-lg p-6 shadow-lg mb-8 border border-zinc-200 dark:border-zinc-700">
-						<p className="text-lg leading-relaxed text-zinc-700 dark:text-zinc-300">
-							{currentNode.text}
-						</p>
+					{/* Animation Controls */}
+					<div className="mb-6">
+						<AnimationControls
+							onAnimationToggle={setAnimationsEnabled}
+							className="justify-end"
+						/>
 					</div>
+
+					{/* Story Content */}
+					<StoryContent
+						key={storyKey}
+						title={currentNode.title}
+						text={currentNode.text}
+						enableAnimations={animationsEnabled}
+						className="fade-in"
+					/>
 
 					{/* Choices */}
-					<div className="space-y-3">
-						<h3 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 mb-4">
-							What do you do?
-						</h3>
-						{currentNode.choices.map((choice) => (
-							<button
-								key={choice.id}
-								onClick={() => handleChoice(choice.next_node_id, choice.id, choice.text)}
-								className="w-full text-left p-4 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg transition-colors duration-200 border border-zinc-300 dark:border-zinc-600"
-							>
-								<span className="text-zinc-800 dark:text-zinc-200 font-medium">
-									→ {choice.text}
-								</span>
-							</button>
-						))}
-					</div>
+					<StoryChoices
+						key={`choices-${storyKey}`}
+						choices={currentNode.choices}
+						onChoiceSelect={handleChoice}
+						enableAnimations={animationsEnabled}
+					/>
 
 					{/* Ending indicator and restart option */}
 					{currentNode.is_ending && (

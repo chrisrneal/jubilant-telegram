@@ -16,4 +16,164 @@
 	}
 }
 
+@layer components {
+  /* Story Content Styling */
+  .story-narrative {
+    @apply text-lg leading-relaxed text-zinc-700 dark:text-zinc-300;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.75;
+  }
+
+  .story-dialogue-container {
+    @apply border-l-4 border-blue-400 dark:border-blue-500 pl-4 my-4;
+  }
+
+  .story-character-name {
+    @apply font-bold text-blue-700 dark:text-blue-300 text-sm uppercase tracking-wider mb-1;
+  }
+
+  .story-dialogue-text {
+    @apply text-zinc-800 dark:text-zinc-200 italic text-base leading-relaxed;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .story-system-message {
+    @apply text-amber-700 dark:text-amber-300 text-sm font-medium italic border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-md;
+  }
+
+  /* Enhanced Choice Buttons */
+  .story-choice {
+    @apply w-full text-left p-4 bg-gradient-to-r from-zinc-100 to-zinc-50 dark:from-zinc-700 dark:to-zinc-800 
+           hover:from-blue-50 hover:to-indigo-50 dark:hover:from-zinc-600 dark:hover:to-blue-900/20
+           rounded-lg transition-all duration-300 border border-zinc-300 dark:border-zinc-600
+           hover:border-blue-300 dark:hover:border-blue-500 hover:shadow-md transform hover:scale-[1.02]
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+  }
+
+  .story-choice:active {
+    @apply transform scale-[0.98] transition-transform duration-150;
+  }
+
+  .story-choice-text {
+    @apply text-zinc-800 dark:text-zinc-200 font-medium flex items-center;
+  }
+
+  .story-choice-arrow {
+    @apply text-blue-600 dark:text-blue-400 mr-3 transition-transform duration-300;
+  }
+
+  .story-choice:hover .story-choice-arrow {
+    @apply transform translate-x-1;
+  }
+
+  /* Story Container */
+  .story-content-card {
+    @apply bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-800 dark:to-zinc-900 
+           rounded-xl p-8 shadow-xl mb-8 border border-zinc-200 dark:border-zinc-700
+           backdrop-blur-sm;
+  }
+
+  /* Animation Classes */
+  .fade-in {
+    animation: fadeIn 0.8s ease-out forwards;
+  }
+
+  .slide-in-up {
+    animation: slideInUp 0.6s ease-out forwards;
+  }
+
+  .typewriter {
+    overflow: hidden;
+    white-space: nowrap;
+    animation: typewriter 2s steps(40, end) forwards;
+  }
+
+  .choice-appear {
+    animation: choiceAppear 0.4s ease-out forwards;
+  }
+
+  .choice-appear:nth-child(1) { animation-delay: 0.1s; }
+  .choice-appear:nth-child(2) { animation-delay: 0.2s; }
+  .choice-appear:nth-child(3) { animation-delay: 0.3s; }
+  .choice-appear:nth-child(4) { animation-delay: 0.4s; }
+
+  /* Accessibility: Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .fade-in,
+    .slide-in-up,
+    .typewriter,
+    .choice-appear {
+      animation: none;
+    }
+    
+    .story-choice {
+      @apply transform-none hover:transform-none;
+    }
+  }
+
+  /* Motion controls for user preferences */
+  .motion-reduced .fade-in,
+  .motion-reduced .slide-in-up,
+  .motion-reduced .typewriter,
+  .motion-reduced .choice-appear {
+    animation: none;
+  }
+  
+  .motion-reduced .story-choice {
+    @apply transform-none hover:transform-none;
+  }
+}
+
+@layer utilities {
+  /* Animation Keyframes */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes typewriter {
+    from {
+      width: 0;
+    }
+    to {
+      width: 100%;
+    }
+  }
+
+  @keyframes choiceAppear {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Utility for disabling animations */
+  .no-animation * {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+
 
