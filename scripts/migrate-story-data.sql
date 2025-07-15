@@ -213,3 +213,18 @@ SELECT
   'Choices' as table_name,
   COUNT(*) as row_count
 FROM choices;
+
+-- Optional: Run party system migration
+-- After running this base migration, you can optionally run the party system migration
+-- for enhanced party creation features:
+-- 1. Run this script first (migrate-story-data.sql)
+-- 2. Then run: party-system-migration.sql
+-- 
+-- The party system adds:
+-- - Predefined character classes (Warrior, Mage, Rogue, Cleric, Ranger)
+-- - Party configuration management 
+-- - Individual party member tracking
+-- - Enhanced analytics and querying capabilities
+--
+-- Note: The application works without the party system migration,
+-- storing party data in the game_states.progress_data JSONB field.
