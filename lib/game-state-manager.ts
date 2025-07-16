@@ -4,7 +4,7 @@
  * serialization/deserialization, and validation
  */
 
-import { GameState, ProgressData, ChoiceRecord, PlayerInventory, PlayerStats, PartyConfiguration, PartyMember, PartyMemberClass } from './supabase'
+import { GameState, ProgressData, ChoiceRecord, PlayerInventory, PlayerStats, PartyConfiguration, PartyMember, PartyMemberClass, CharacterAttribute, CharacterAttributes, CoreStats } from './supabase'
 
 // Default party member classes available in the game
 export const DEFAULT_PARTY_CLASSES: PartyMemberClass[] = [
@@ -82,6 +82,7 @@ export const DEFAULT_PARTY_CLASSES: PartyMemberClass[] = [
 
 export class GameStateManager {
 	private static readonly CURRENT_VERSION = 1
+	private static readonly CURRENT_CHARACTER_MODEL_VERSION = 1
 	private static readonly DEFAULT_PARTY_SIZE_LIMIT = 4
 	private static readonly MIN_PARTY_SIZE = 1
 	
@@ -274,10 +275,22 @@ export class GameStateManager {
 		// Handle legacy data (simple Record<string, any>)
 		if (!data || typeof data !== 'object' || !('version' in data)) {
 			console.log('Migrating legacy progress data to current version')
+			const initialData = this.createInitialProgressData('legacy-migration')
+			
+			// Convert legacy data to proper PlayerStats format
+			const playerStats: PlayerStats = {}
+			if (data && typeof data === 'object') {
+				Object.entries(data).forEach(([key, value]) => {
+					playerStats[key] = {
+						value: value as string | number | boolean,
+						lastUpdated: new Date().toISOString()
+					}
+				})
+			}
+			
 			return {
-				...this.createInitialProgressData('legacy-migration'),
-				// Preserve any legacy data that might be useful
-				playerStats: typeof data === 'object' ? data : {}
+				...initialData,
+				playerStats
 			}
 		}
 
@@ -397,41 +410,310 @@ export class GameStateManager {
 	}
 
 	/**
-	 * Create a party member
+	 * Create a character attribute with proper defaults
+	 */
+	static createCharacterAttribute(
+		value: number,
+		options?: {
+			category?: 'core' | 'derived' | 'custom' | 'relationship'
+			displayName?: string
+			description?: string
+			constraints?: {
+				min?: number
+				max?: number
+				readonly?: boolean
+			}
+		}
+	): CharacterAttribute {
+		return {
+			value,
+			category: options?.category || 'custom',
+			displayName: options?.displayName,
+			description: options?.description,
+			constraints: options?.constraints
+		}
+	}
+
+	/**
+	 * Convert core stats to extensible character attributes
+	 */
+	static convertCoreStatsToAttributes(coreStats: CoreStats): CharacterAttributes {
+		const attributes: CharacterAttributes = {}
+		
+		Object.entries(coreStats).forEach(([statName, value]) => {
+			attributes[statName] = this.createCharacterAttribute(value, {
+				category: 'core',
+				displayName: statName.charAt(0).toUpperCase() + statName.slice(1),
+				description: `Core ${statName} attribute`,
+				constraints: { min: 1, max: 20 }
+			})
+		})
+		
+		return attributes
+	}
+
+	/**
+	 * Add or update a character attribute
+	 */
+	static setCharacterAttribute(
+		member: PartyMember,
+		attributeId: string,
+		value: number,
+		options?: {
+			category?: 'core' | 'derived' | 'custom' | 'relationship'
+			displayName?: string
+			description?: string
+			constraints?: any
+		}
+	): PartyMember {
+		const updatedMember = { ...member }
+		
+		if (!updatedMember.dynamicAttributes) {
+			updatedMember.dynamicAttributes = {}
+		}
+		
+		updatedMember.dynamicAttributes[attributeId] = this.createCharacterAttribute(value, options)
+		updatedMember.modelVersion = this.CURRENT_CHARACTER_MODEL_VERSION
+		
+		return updatedMember
+	}
+
+	/**
+	 * Get character attribute value with fallback to core stats
+	 */
+	static getCharacterAttribute(member: PartyMember, attributeId: string): number | undefined {
+		// Check dynamic attributes first
+		if (member.dynamicAttributes?.[attributeId]) {
+			return member.dynamicAttributes[attributeId].value
+		}
+		
+		// Fallback to core stats for backward compatibility
+		if ((member.class.baseStats as any)[attributeId] !== undefined) {
+			return (member.class.baseStats as any)[attributeId]
+		}
+		
+		return undefined
+	}
+
+	/**
+	 * Add a character trait
+	 */
+	static setCharacterTrait(
+		member: PartyMember,
+		traitId: string,
+		value: any,
+		source?: string
+	): PartyMember {
+		const updatedMember = { ...member }
+		
+		if (!updatedMember.traits) {
+			updatedMember.traits = {}
+		}
+		
+		updatedMember.traits[traitId] = {
+			value,
+			source,
+			acquiredAt: new Date().toISOString()
+		}
+		updatedMember.modelVersion = this.CURRENT_CHARACTER_MODEL_VERSION
+		
+		return updatedMember
+	}
+
+	/**
+	 * Add a relationship between characters
+	 */
+	static setCharacterRelationship(
+		member: PartyMember,
+		targetId: string,
+		relationshipType: string,
+		strength: number,
+		data?: any
+	): PartyMember {
+		const updatedMember = { ...member }
+		
+		if (!updatedMember.relationships) {
+			updatedMember.relationships = {}
+		}
+		
+		updatedMember.relationships[targetId] = {
+			type: relationshipType,
+			strength,
+			data
+		}
+		updatedMember.modelVersion = this.CURRENT_CHARACTER_MODEL_VERSION
+		
+		return updatedMember
+	}
+
+	/**
+	 * Migrate character model to current version
+	 */
+	static migrateCharacterModel(member: PartyMember): PartyMember {
+		const currentVersion = member.modelVersion || 0
+		
+		if (currentVersion >= this.CURRENT_CHARACTER_MODEL_VERSION) {
+			return member // Already up to date
+		}
+		
+		let migratedMember = { ...member }
+		
+		// Migration from version 0 to 1: Add extensible attributes
+		if (currentVersion < 1) {
+			// Convert core stats to dynamic attributes if not already done
+			if (!migratedMember.dynamicAttributes) {
+				migratedMember.dynamicAttributes = this.convertCoreStatsToAttributes(member.class.baseStats)
+			}
+			
+			// Initialize other extensible fields if they don't exist
+			if (!migratedMember.traits) {
+				migratedMember.traits = {}
+			}
+			
+			if (!migratedMember.relationships) {
+				migratedMember.relationships = {}
+			}
+			
+			if (!migratedMember.experienceData) {
+				migratedMember.experienceData = {
+					totalXP: 0,
+					skillXP: {},
+					milestones: []
+				}
+			}
+		}
+		
+		// Future migrations would go here
+		// if (currentVersion < 2) { ... }
+		
+		migratedMember.modelVersion = this.CURRENT_CHARACTER_MODEL_VERSION
+		return migratedMember
+	}
+
+	/**
+	 * Migrate party configuration to current version
+	 */
+	static migratePartyConfiguration(party: PartyConfiguration): PartyConfiguration {
+		let migratedParty = { ...party }
+		
+		// Migrate each member
+		migratedParty.members = party.members.map(member => this.migrateCharacterModel(member))
+		
+		// Add party-level extensible fields if they don't exist
+		if (!migratedParty.partyTraits) {
+			migratedParty.partyTraits = {}
+		}
+		
+		if (!migratedParty.dynamics) {
+			migratedParty.dynamics = {
+				cohesion: 50, // Default neutral cohesion
+				specializations: {}
+			}
+		}
+		
+		migratedParty.modelVersion = this.CURRENT_CHARACTER_MODEL_VERSION
+		return migratedParty
+	}
+
+	/**
+	 * Create an extensible character class
+	 */
+	static createExtensibleCharacterClass(
+		id: string,
+		name: string,
+		description: string,
+		abilities: string[],
+		baseStats: CoreStats,
+		extendedAttributes?: CharacterAttributes,
+		options?: {
+			relationshipTypes?: string[]
+			traitCategories?: string[]
+			attributeSchema?: any
+		}
+	): PartyMemberClass {
+		return {
+			id,
+			name,
+			description,
+			abilities,
+			baseStats,
+			modelVersion: this.CURRENT_CHARACTER_MODEL_VERSION,
+			extendedAttributes,
+			attributeSchema: options?.attributeSchema,
+			relationshipTypes: options?.relationshipTypes || ['friendship', 'rivalry', 'mentorship'],
+			traitCategories: options?.traitCategories || ['personality', 'background', 'quirks'],
+			extensionData: {}
+		}
+	}
+
+	/**
+	 * Create a party member with extensibility support
 	 */
 	static createPartyMember(
 		name: string,
 		classId: string,
-		customAttributes?: { [key: string]: string | number }
+		customAttributes?: { [key: string]: string | number },
+		extendedOptions?: {
+			dynamicAttributes?: CharacterAttributes
+			traits?: any
+			relationships?: any
+		}
 	): PartyMember | null {
 		const memberClass = DEFAULT_PARTY_CLASSES.find(c => c.id === classId)
 		if (!memberClass) {
 			return null
 		}
 
-		return {
+		const member: PartyMember = {
 			id: `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
 			name: name.trim(),
 			class: memberClass,
 			level: 1,
 			customAttributes,
-			createdAt: new Date().toISOString()
+			createdAt: new Date().toISOString(),
+			// Initialize extensible fields
+			modelVersion: this.CURRENT_CHARACTER_MODEL_VERSION,
+			dynamicAttributes: extendedOptions?.dynamicAttributes || this.convertCoreStatsToAttributes(memberClass.baseStats),
+			relationships: extendedOptions?.relationships || {},
+			traits: extendedOptions?.traits || {},
+			experienceData: {
+				totalXP: 0,
+				skillXP: {},
+				milestones: []
+			},
+			extensionData: {}
 		}
+
+		return member
 	}
 
 	/**
-	 * Create party configuration
+	 * Create party configuration with extensibility support
 	 */
 	static createPartyConfiguration(
 		members: PartyMember[], 
-		formation?: string
+		formation?: string,
+		extendedOptions?: {
+			partyTraits?: any
+			dynamics?: any
+		}
 	): PartyConfiguration {
-		return {
-			members,
+		const party: PartyConfiguration = {
+			members: members.map(member => this.migrateCharacterModel(member)),
 			formation,
 			createdAt: new Date().toISOString(),
-			maxSize: this.DEFAULT_PARTY_SIZE_LIMIT
+			maxSize: this.DEFAULT_PARTY_SIZE_LIMIT,
+			// Initialize extensible fields
+			modelVersion: this.CURRENT_CHARACTER_MODEL_VERSION,
+			partyTraits: extendedOptions?.partyTraits || {},
+			dynamics: extendedOptions?.dynamics || {
+				cohesion: 50,
+				specializations: {}
+			},
+			extensionData: {}
 		}
+		
+		return party
 	}
 
 	/**
@@ -480,28 +762,36 @@ export class GameStateManager {
 	}
 
 	/**
-	 * Set party configuration in progress data
+	 * Set party configuration in progress data with migration support
 	 */
 	static setPartyConfiguration(
 		progressData: ProgressData,
 		party: PartyConfiguration
 	): ProgressData {
-		const validation = this.validatePartyConfiguration(party)
+		// Migrate party configuration to current version
+		const migratedParty = this.migratePartyConfiguration(party)
+		
+		const validation = this.validatePartyConfiguration(migratedParty)
 		if (!validation.isValid) {
 			throw new Error(`Invalid party configuration: ${validation.errors.join(', ')}`)
 		}
 
 		return {
 			...progressData,
-			party
+			party: migratedParty
 		}
 	}
 
 	/**
-	 * Get party configuration from progress data
+	 * Get party configuration from progress data with migration support
 	 */
 	static getPartyConfiguration(progressData: ProgressData): PartyConfiguration | null {
-		return progressData.party || null
+		if (!progressData.party) {
+			return null
+		}
+		
+		// Always migrate when retrieving to ensure latest format
+		return this.migratePartyConfiguration(progressData.party)
 	}
 
 	/**

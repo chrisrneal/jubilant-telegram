@@ -92,20 +92,55 @@ export interface PlayerStats {
 	}
 }
 
+// Extensible character attribute system
+export interface CharacterAttribute {
+	value: number
+	category?: 'core' | 'derived' | 'custom' | 'relationship'
+	displayName?: string
+	description?: string
+	constraints?: {
+		min?: number
+		max?: number
+		readonly?: boolean
+	}
+}
+
+export interface CharacterAttributes {
+	[attributeId: string]: CharacterAttribute
+}
+
+// Core stats that are backward compatible
+export interface CoreStats {
+	strength: number
+	dexterity: number
+	intelligence: number
+	wisdom: number
+	charisma: number
+	constitution: number
+}
+
 // Party system types
 export interface PartyMemberClass {
 	id: string
 	name: string
 	description: string
 	abilities: string[]
-	baseStats: {
-		strength: number
-		dexterity: number
-		intelligence: number
-		wisdom: number
-		charisma: number
-		constitution: number
+	baseStats: CoreStats
+	// Extensible attributes system
+	modelVersion?: number
+	extendedAttributes?: CharacterAttributes
+	attributeSchema?: {
+		[attributeId: string]: {
+			type: 'number' | 'string' | 'boolean' | 'object'
+			required?: boolean
+			defaultValue?: any
+			category?: string
+		}
 	}
+	// Future extension points
+	relationshipTypes?: string[]
+	traitCategories?: string[]
+	extensionData?: { [key: string]: any }
 }
 
 export interface PartyMember {
@@ -117,6 +152,30 @@ export interface PartyMember {
 		[key: string]: string | number
 	}
 	createdAt: string
+	// Extensible character system
+	modelVersion?: number
+	dynamicAttributes?: CharacterAttributes
+	relationships?: {
+		[targetId: string]: {
+			type: string
+			strength: number
+			data?: any
+		}
+	}
+	traits?: {
+		[traitId: string]: {
+			value: any
+			source?: string
+			acquiredAt?: string
+		}
+	}
+	experienceData?: {
+		totalXP?: number
+		skillXP?: { [skillId: string]: number }
+		milestones?: string[]
+	}
+	// Future extension point
+	extensionData?: { [key: string]: any }
 }
 
 export interface PartyConfiguration {
@@ -124,6 +183,22 @@ export interface PartyConfiguration {
 	formation?: string // Optional formation preference
 	createdAt: string
 	maxSize: number
+	// Extensible party system
+	modelVersion?: number
+	partyTraits?: {
+		[traitId: string]: {
+			value: any
+			source?: string
+			effects?: any
+		}
+	}
+	dynamics?: {
+		cohesion?: number
+		leadership?: string // member ID
+		specializations?: { [role: string]: string } // role -> member ID
+	}
+	// Future extension point
+	extensionData?: { [key: string]: any }
 }
 
 export interface ProgressData {
