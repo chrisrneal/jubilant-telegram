@@ -32,7 +32,7 @@ export default function PartyCreation({
 		
 		setEditingMember({
 			name: '',
-			classId: availableClasses[0]?.id || 'warrior'
+			classId: availableClasses[0]?.id || 'barbarian'
 		})
 		setValidationErrors([])
 	}

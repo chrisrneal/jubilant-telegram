@@ -9,17 +9,17 @@ import { GameState, ProgressData, ChoiceRecord, PlayerInventory, PlayerStats, Pa
 // Default party member classes available in the game
 export const DEFAULT_PARTY_CLASSES: PartyMemberClass[] = [
 	{
-		id: 'warrior',
-		name: 'Warrior',
-		description: 'A strong fighter skilled in melee combat and defense.',
-		abilities: ['Shield Bash', 'Berserker Rage', 'Taunt'],
+		id: 'barbarian',
+		name: 'Barbarian',
+		description: 'A fierce warrior driven by primal rage and brute strength.',
+		abilities: ['Rage', 'Reckless Attack', 'Danger Sense'],
 		baseStats: {
-			strength: 16,
-			dexterity: 12,
-			intelligence: 10,
+			strength: 17,
+			dexterity: 13,
+			intelligence: 8,
 			wisdom: 12,
-			charisma: 11,
-			constitution: 15
+			charisma: 10,
+			constitution: 16
 		}
 	},
 	{
@@ -37,6 +37,20 @@ export const DEFAULT_PARTY_CLASSES: PartyMemberClass[] = [
 		}
 	},
 	{
+		id: 'priest',
+		name: 'Priest',
+		description: 'A divine spellcaster focused on healing and divine magic.',
+		abilities: ['Heal', 'Bless', 'Divine Protection'],
+		baseStats: {
+			strength: 12,
+			dexterity: 10,
+			intelligence: 13,
+			wisdom: 16,
+			charisma: 15,
+			constitution: 14
+		}
+	},
+	{
 		id: 'rogue',
 		name: 'Rogue',
 		description: 'A stealthy character skilled in stealth and precision.',
@@ -51,30 +65,16 @@ export const DEFAULT_PARTY_CLASSES: PartyMemberClass[] = [
 		}
 	},
 	{
-		id: 'cleric',
-		name: 'Cleric',
-		description: 'A divine spellcaster focused on healing and support.',
-		abilities: ['Heal', 'Bless', 'Turn Undead'],
+		id: 'bard',
+		name: 'Bard',
+		description: 'A charismatic performer who weaves magic through music and words.',
+		abilities: ['Inspiration', 'Charm Person', 'Healing Song'],
 		baseStats: {
-			strength: 13,
-			dexterity: 10,
-			intelligence: 12,
-			wisdom: 16,
-			charisma: 14,
-			constitution: 13
-		}
-	},
-	{
-		id: 'ranger',
-		name: 'Ranger',
-		description: 'A wilderness expert skilled with bow and nature magic.',
-		abilities: ['Track', 'Animal Companion', 'Hunter\'s Mark'],
-		baseStats: {
-			strength: 14,
-			dexterity: 15,
-			intelligence: 12,
-			wisdom: 15,
-			charisma: 11,
+			strength: 10,
+			dexterity: 14,
+			intelligence: 13,
+			wisdom: 12,
+			charisma: 17,
 			constitution: 12
 		}
 	}
