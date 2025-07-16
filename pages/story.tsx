@@ -5,8 +5,9 @@ import Section from '@/components/section'
 import StoryContent from '@/components/story-content'
 import StoryChoices from '@/components/story-choices'
 import AnimationControls from '@/components/animation-controls'
+import PartyCreation from '@/components/party-creation'
 import { StoryService } from '@/lib/story-service'
-import { StoryNodeWithChoices, Story, UserSession, GameState } from '@/lib/supabase'
+import { StoryNodeWithChoices, Story, UserSession, GameState, PartyConfiguration } from '@/lib/supabase'
 import { GameStateManager } from '@/lib/game-state-manager'
 import { useAuth } from '@/lib/auth-context'
 import Link from 'next/link'
@@ -26,6 +27,8 @@ export default function StoryPage() {
 	const [animationsEnabled, setAnimationsEnabled] = useState(true)
 	const [storyKey, setStoryKey] = useState(0) // Key to force re-render for animations
 	const [isSpecificAdventure, setIsSpecificAdventure] = useState(false)
+	const [showPartyCreation, setShowPartyCreation] = useState(false)
+	const [selectedStory, setSelectedStory] = useState<Story | null>(null)
 	
 	const { user, isAuthenticated, loading: authLoading } = useAuth()
 
@@ -94,19 +97,13 @@ export default function StoryPage() {
 						const story = stories.find(s => s.id === existingGameState.story_id)
 						setCurrentStory(story || null)
 					} else {
-						// Start new game with random story
+						// Start new game with random story - show party creation first
 						const randomStory = await StoryService.getRandomStory()
 						if (randomStory) {
-							setCurrentStory(randomStory)
-							setCurrentNodeId('start')
-							
-							// Create initial game state
-							const newGameState = await StoryService.saveGameState(
-								newSessionId, 
-								randomStory.id, 
-								'start'
-							)
-							setGameState(newGameState)
+							setSelectedStory(randomStory)
+							setShowPartyCreation(true)
+							setLoading(false) // Stop loading, let party creation take over
+							return
 						} else {
 							setError('No stories available')
 							return
@@ -193,24 +190,59 @@ export default function StoryPage() {
 			// Get a new random story
 			const randomStory = await StoryService.getRandomStory()
 			if (randomStory) {
-				setCurrentStory(randomStory)
-				setCurrentNodeId('start')
-				
-				// Create new game state
-				const newGameState = await StoryService.saveGameState(
-					sessionId, 
-					randomStory.id, 
-					'start'
-				)
-				setGameState(newGameState)
-				
-				// Force re-render with animations
-				setStoryKey(prev => prev + 1)
+				setSelectedStory(randomStory)
+				setShowPartyCreation(true)
 			}
 		} catch (err) {
 			console.error('Error restarting game:', err)
 			setError('Failed to restart game')
 		}
+	}
+
+	const handlePartyCreated = async (party: PartyConfiguration) => {
+		if (!selectedStory || !sessionId) return
+
+		try {
+			setShowPartyCreation(false)
+			setLoading(true)
+			
+			// Create initial progress data with party configuration
+			const initialProgressData = GameStateManager.createInitialProgressData(sessionId)
+			const progressDataWithParty = GameStateManager.setPartyConfiguration(initialProgressData, party)
+			
+			// Create initial game state with party
+			const newGameState = await StoryService.saveGameState(
+				sessionId, 
+				selectedStory.id, 
+				'start',
+				progressDataWithParty
+			)
+			
+			if (newGameState) {
+				setCurrentStory(selectedStory)
+				setCurrentNodeId('start')
+				setGameState(newGameState)
+				setSelectedStory(null)
+				
+				// Force re-render with animations
+				setStoryKey(prev => prev + 1)
+			} else {
+				setError('Failed to create game state')
+			}
+		} catch (err) {
+			console.error('Error creating adventure with party:', err)
+			setError('Failed to create adventure')
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	const handleCancelPartyCreation = () => {
+		setShowPartyCreation(false)
+		setSelectedStory(null)
+		setError(null)
+		// Redirect back to adventures page or home page
+		router.push('/adventures')
 	}
 
 	// Show loading while auth is loading
@@ -221,6 +253,34 @@ export default function StoryPage() {
 					<div className="text-center">
 						<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
 						<p className="mt-4 text-zinc-600 dark:text-zinc-400">Loading your adventure...</p>
+					</div>
+				</Section>
+			</Page>
+		)
+	}
+
+	// Show party creation screen for new adventures
+	if (showPartyCreation && selectedStory) {
+		return (
+			<Page title="Create Your Party">
+				<Section>
+					<div className="max-w-4xl mx-auto">
+						{/* Story Info */}
+						<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+							<h2 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-2">
+								Starting: {selectedStory.title}
+							</h2>
+							{selectedStory.description && (
+								<p className="text-sm text-blue-600 dark:text-blue-300">
+									{selectedStory.description}
+								</p>
+							)}
+						</div>
+						
+						<PartyCreation
+							onPartyCreated={handlePartyCreated}
+							onCancel={handleCancelPartyCreation}
+						/>
 					</div>
 				</Section>
 			</Page>
@@ -428,6 +488,39 @@ export default function StoryPage() {
 					{/* Game progress indicators */}
 					{gameState && gameState.progress_data && GameStateManager.validateProgressData(gameState.progress_data) && (
 						<div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-700">
+							{/* Party Information */}
+							{GameStateManager.hasPartyConfiguration(gameState.progress_data) && (
+								<div className="mb-6">
+									<h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+										🏰 Your Party
+									</h3>
+									<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+										{GameStateManager.getPartyConfiguration(gameState.progress_data)!.members.map((member, index) => (
+											<div key={member.id} className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+												<div className="text-sm">
+													<div className="font-semibold text-amber-800 dark:text-amber-200">
+														{member.name}
+													</div>
+													<div className="text-amber-600 dark:text-amber-300 text-xs">
+														{member.class.name} (Lvl {member.level})
+													</div>
+													<div className="flex flex-wrap gap-1 mt-2">
+														{member.class.abilities.slice(0, 2).map((ability, abilityIndex) => (
+															<span 
+																key={abilityIndex}
+																className="text-xs bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-1 py-0.5 rounded"
+															>
+																{ability}
+															</span>
+														))}
+													</div>
+												</div>
+											</div>
+										))}
+									</div>
+								</div>
+							)}
+
 							<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
 								<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
 									<p className="text-sm text-blue-800 dark:text-blue-200">

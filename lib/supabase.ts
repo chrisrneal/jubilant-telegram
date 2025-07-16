@@ -92,11 +92,46 @@ export interface PlayerStats {
 	}
 }
 
+// Party system types
+export interface PartyMemberClass {
+	id: string
+	name: string
+	description: string
+	abilities: string[]
+	baseStats: {
+		strength: number
+		dexterity: number
+		intelligence: number
+		wisdom: number
+		charisma: number
+		constitution: number
+	}
+}
+
+export interface PartyMember {
+	id: string
+	name: string
+	class: PartyMemberClass
+	level: number
+	customAttributes?: {
+		[key: string]: string | number
+	}
+	createdAt: string
+}
+
+export interface PartyConfiguration {
+	members: PartyMember[]
+	formation?: string // Optional formation preference
+	createdAt: string
+	maxSize: number
+}
+
 export interface ProgressData {
 	visitedScenarios: string[]
 	choiceHistory: ChoiceRecord[]
 	inventory: PlayerInventory
 	playerStats: PlayerStats
+	party?: PartyConfiguration // Optional party configuration
 	gameplayStats: {
 		startTime: string
 		totalChoicesMade: number

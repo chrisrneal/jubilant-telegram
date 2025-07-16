@@ -107,7 +107,7 @@ async function listAdventures(req: NextApiRequest, res: NextApiResponse) {
 
 async function createAdventure(req: NextApiRequest, res: NextApiResponse) {
 	try {
-		const { userId, storyId, title } = req.body
+		const { userId, storyId, title, party } = req.body
 
 		if (!storyId) {
 			return res.status(400).json({ error: 'Story ID is required' })
@@ -130,14 +130,38 @@ async function createAdventure(req: NextApiRequest, res: NextApiResponse) {
 			return res.status(500).json({ error: 'Failed to create session for adventure' })
 		}
 
-		// Create initial game state
+		// Create initial progress data with party configuration
+		let initialProgressData = GameStateManager.createInitialProgressData(adventureSessionId)
+		
+		// If party configuration is provided, validate and add it
+		if (party) {
+			try {
+				const validation = GameStateManager.validatePartyConfiguration(party)
+				if (!validation.isValid) {
+					return res.status(400).json({ 
+						error: 'Invalid party configuration', 
+						details: validation.errors 
+					})
+				}
+				
+				initialProgressData = GameStateManager.setPartyConfiguration(initialProgressData, party)
+			} catch (error) {
+				console.error('Error setting party configuration:', error)
+				return res.status(400).json({ 
+					error: 'Failed to set party configuration' 
+				})
+			}
+		}
+
+		// Create initial game state with party data
 		const gameStateResponse = await fetch(`${req.headers.origin}/api/game-state`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				sessionId: adventureSessionId,
 				storyId,
-				currentNodeId: 'start'
+				currentNodeId: 'start',
+				progressData: initialProgressData
 			})
 		})
 

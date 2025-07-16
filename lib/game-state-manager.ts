@@ -4,10 +4,86 @@
  * serialization/deserialization, and validation
  */
 
-import { GameState, ProgressData, ChoiceRecord, PlayerInventory, PlayerStats } from './supabase'
+import { GameState, ProgressData, ChoiceRecord, PlayerInventory, PlayerStats, PartyConfiguration, PartyMember, PartyMemberClass } from './supabase'
+
+// Default party member classes available in the game
+export const DEFAULT_PARTY_CLASSES: PartyMemberClass[] = [
+	{
+		id: 'warrior',
+		name: 'Warrior',
+		description: 'A strong fighter skilled in melee combat and defense.',
+		abilities: ['Shield Bash', 'Berserker Rage', 'Taunt'],
+		baseStats: {
+			strength: 16,
+			dexterity: 12,
+			intelligence: 10,
+			wisdom: 12,
+			charisma: 11,
+			constitution: 15
+		}
+	},
+	{
+		id: 'mage',
+		name: 'Mage',
+		description: 'A wielder of arcane magic with powerful spells.',
+		abilities: ['Fireball', 'Magic Shield', 'Teleport'],
+		baseStats: {
+			strength: 8,
+			dexterity: 11,
+			intelligence: 17,
+			wisdom: 14,
+			charisma: 12,
+			constitution: 10
+		}
+	},
+	{
+		id: 'rogue',
+		name: 'Rogue',
+		description: 'A stealthy character skilled in stealth and precision.',
+		abilities: ['Sneak Attack', 'Lockpicking', 'Poison Strike'],
+		baseStats: {
+			strength: 12,
+			dexterity: 17,
+			intelligence: 13,
+			wisdom: 12,
+			charisma: 14,
+			constitution: 11
+		}
+	},
+	{
+		id: 'cleric',
+		name: 'Cleric',
+		description: 'A divine spellcaster focused on healing and support.',
+		abilities: ['Heal', 'Bless', 'Turn Undead'],
+		baseStats: {
+			strength: 13,
+			dexterity: 10,
+			intelligence: 12,
+			wisdom: 16,
+			charisma: 14,
+			constitution: 13
+		}
+	},
+	{
+		id: 'ranger',
+		name: 'Ranger',
+		description: 'A wilderness expert skilled with bow and nature magic.',
+		abilities: ['Track', 'Animal Companion', 'Hunter\'s Mark'],
+		baseStats: {
+			strength: 14,
+			dexterity: 15,
+			intelligence: 12,
+			wisdom: 15,
+			charisma: 11,
+			constitution: 12
+		}
+	}
+]
 
 export class GameStateManager {
 	private static readonly CURRENT_VERSION = 1
+	private static readonly DEFAULT_PARTY_SIZE_LIMIT = 4
+	private static readonly MIN_PARTY_SIZE = 1
 	
 	/**
 	 * Create initial progress data for a new game
@@ -18,6 +94,7 @@ export class GameStateManager {
 			choiceHistory: [],
 			inventory: {},
 			playerStats: {},
+			party: undefined, // Party will be set during party creation
 			gameplayStats: {
 				startTime: new Date().toISOString(),
 				totalChoicesMade: 0,
@@ -170,6 +247,8 @@ export class GameStateManager {
 			}
 		}
 
+		// Party is optional - it may be undefined for adventures without party creation
+
 		// Validate array fields
 		if (!Array.isArray(data.visitedScenarios) || !Array.isArray(data.choiceHistory)) {
 			return false
@@ -214,6 +293,7 @@ export class GameStateManager {
 		if (!migrated.choiceHistory) migrated.choiceHistory = []
 		if (!migrated.inventory) migrated.inventory = {}
 		if (!migrated.playerStats) migrated.playerStats = {}
+		if (!migrated.party) migrated.party = undefined // Party is optional
 		if (!migrated.gameplayStats) {
 			migrated.gameplayStats = {
 				startTime: new Date().toISOString(),
@@ -307,5 +387,127 @@ export class GameStateManager {
 		const startTime = new Date(progressData.gameplayStats.startTime)
 		const now = new Date()
 		return Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60))
+	}
+
+	/**
+	 * Get available party member classes
+	 */
+	static getAvailablePartyClasses(): PartyMemberClass[] {
+		return DEFAULT_PARTY_CLASSES
+	}
+
+	/**
+	 * Create a party member
+	 */
+	static createPartyMember(
+		name: string,
+		classId: string,
+		customAttributes?: { [key: string]: string | number }
+	): PartyMember | null {
+		const memberClass = DEFAULT_PARTY_CLASSES.find(c => c.id === classId)
+		if (!memberClass) {
+			return null
+		}
+
+		return {
+			id: `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+			name: name.trim(),
+			class: memberClass,
+			level: 1,
+			customAttributes,
+			createdAt: new Date().toISOString()
+		}
+	}
+
+	/**
+	 * Create party configuration
+	 */
+	static createPartyConfiguration(
+		members: PartyMember[], 
+		formation?: string
+	): PartyConfiguration {
+		return {
+			members,
+			formation,
+			createdAt: new Date().toISOString(),
+			maxSize: this.DEFAULT_PARTY_SIZE_LIMIT
+		}
+	}
+
+	/**
+	 * Validate party configuration
+	 */
+	static validatePartyConfiguration(party: PartyConfiguration): {
+		isValid: boolean
+		errors: string[]
+	} {
+		const errors: string[] = []
+
+		// Check party size limits
+		if (party.members.length < this.MIN_PARTY_SIZE) {
+			errors.push(`Party must have at least ${this.MIN_PARTY_SIZE} member(s)`)
+		}
+
+		if (party.members.length > party.maxSize) {
+			errors.push(`Party cannot exceed ${party.maxSize} members`)
+		}
+
+		// Check for duplicate member names
+		const names = party.members.map(m => m.name.toLowerCase())
+		const duplicateNames = names.filter((name, index) => names.indexOf(name) !== index)
+		if (duplicateNames.length > 0) {
+			errors.push('Party members must have unique names')
+		}
+
+		// Check for empty names
+		const emptyNames = party.members.filter(m => !m.name.trim())
+		if (emptyNames.length > 0) {
+			errors.push('All party members must have names')
+		}
+
+		// Check for valid classes
+		const invalidClasses = party.members.filter(m => 
+			!DEFAULT_PARTY_CLASSES.find(c => c.id === m.class.id)
+		)
+		if (invalidClasses.length > 0) {
+			errors.push('All party members must have valid classes')
+		}
+
+		return {
+			isValid: errors.length === 0,
+			errors
+		}
+	}
+
+	/**
+	 * Set party configuration in progress data
+	 */
+	static setPartyConfiguration(
+		progressData: ProgressData,
+		party: PartyConfiguration
+	): ProgressData {
+		const validation = this.validatePartyConfiguration(party)
+		if (!validation.isValid) {
+			throw new Error(`Invalid party configuration: ${validation.errors.join(', ')}`)
+		}
+
+		return {
+			...progressData,
+			party
+		}
+	}
+
+	/**
+	 * Get party configuration from progress data
+	 */
+	static getPartyConfiguration(progressData: ProgressData): PartyConfiguration | null {
+		return progressData.party || null
+	}
+
+	/**
+	 * Check if progress data has a party configured
+	 */
+	static hasPartyConfiguration(progressData: ProgressData): boolean {
+		return !!progressData.party && progressData.party.members.length > 0
 	}
 }
