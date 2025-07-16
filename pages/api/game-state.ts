@@ -104,13 +104,6 @@ async function createGameState(req: NextApiRequest, res: NextApiResponse) {
 				fallback: true 
 			})
 		}
-
-		if (error) {
-			console.error('Error creating game state:', error)
-			return res.status(500).json({ error: 'Failed to create game state' })
-		}
-
-		return res.status(201).json({ gameState: data })
 	} catch (error) {
 		console.error('Unexpected error creating game state:', error)
 		return res.status(500).json({ error: 'Internal server error' })
