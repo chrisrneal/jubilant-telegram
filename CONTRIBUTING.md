@@ -20,6 +20,12 @@ Thank you for your interest in contributing to Story Rider! This guide will help
 - Improve existing story paths and choices
 - Fix typos and improve story text quality
 
+### 👥 Party & Character System
+- Create new character classes with unique abilities
+- Add custom character attributes and traits
+- Enhance party creation and management features
+- Contribute to the extensible character model
+
 ### 💻 Code Contributions
 - Bug fixes and performance improvements
 - New game features and mechanics
@@ -234,6 +240,89 @@ Edit `lib/fallback-story-data.ts`:
 - **Multiple Endings**: Create various conclusion paths
 - **Inventory Integration**: Use the inventory system for items when appropriate
 
+## 👥 Developing Party & Character Features
+
+### Adding New Character Classes
+
+1. **Update GameStateManager** (`lib/game-state-manager.ts`):
+   ```typescript
+   // Add to DEFAULT_PARTY_CLASSES array
+   {
+     id: 'new-class',
+     name: 'New Class',
+     description: 'A unique character with special abilities.',
+     abilities: ['Special Ability', 'Unique Power', 'Class Feature'],
+     baseStats: {
+       strength: 15,
+       dexterity: 12,
+       intelligence: 14,
+       wisdom: 13,
+       charisma: 11,
+       constitution: 16
+     }
+   }
+   ```
+
+2. **Update Database** (if using Supabase):
+   ```sql
+   INSERT INTO party_member_classes (id, name, description, abilities, base_stats, is_active)
+   VALUES ('new-class', 'New Class', 'Description...', 
+           '["Special Ability", "Unique Power", "Class Feature"]',
+           '{"strength": 15, "dexterity": 12, ...}', true);
+   ```
+
+### Extending the Character Model
+
+1. **Adding Custom Attributes**:
+   ```typescript
+   // Example: Add a "luck" attribute to a character
+   const enhanced = GameStateManager.setCharacterAttribute(character, 'luck', 15, {
+     category: 'custom',
+     displayName: 'Luck',
+     description: 'Influences random events',
+     constraints: { min: 1, max: 20 }
+   })
+   ```
+
+2. **Adding Character Traits**:
+   ```typescript
+   // Add personality traits
+   const social = GameStateManager.setCharacterTrait(character, 'brave', true, 'personality')
+   const quirky = GameStateManager.setCharacterTrait(character, 'collects_maps', {
+     level: 'obsessive',
+     count: 47
+   }, 'quirks')
+   ```
+
+3. **Character Relationships**:
+   ```typescript
+   // Create relationships between party members
+   const friendly = GameStateManager.setCharacterRelationship(
+     character1, character2.id, 'friendship', 75, {
+       notes: 'Met during tavern brawl',
+       sharedExperiences: ['Dragon Hunt']
+     }
+   )
+   ```
+
+### Party System Guidelines
+
+- **Balance**: Ensure new classes are balanced with existing ones
+- **Uniqueness**: Each class should have distinct abilities and playstyle
+- **Extensibility**: Use the extensible model for new features
+- **Backward Compatibility**: Don't break existing party configurations
+- **Documentation**: Update relevant docs when adding features
+
+### Testing Party Features
+
+- [ ] New character classes create successfully
+- [ ] Custom attributes save and load correctly
+- [ ] Party configurations persist across sessions
+- [ ] Character relationships work as expected
+- [ ] Extensible model maintains backward compatibility
+- [ ] Database migration works without data loss
+- [ ] API endpoints handle party data correctly
+
 ## 🧪 Testing Guidelines
 
 ### Manual Testing Checklist
@@ -242,6 +331,9 @@ Edit `lib/fallback-story-data.ts`:
 - [ ] Story progression works correctly
 - [ ] Choices lead to expected outcomes
 - [ ] Game state persists correctly
+- [ ] Party creation and management works
+- [ ] Character classes load with correct abilities
+- [ ] Custom attributes save and restore properly
 - [ ] Works in both database and fallback modes
 - [ ] Responsive design works on mobile and desktop
 - [ ] Dark/light theme switching works
@@ -251,10 +343,11 @@ Edit `lib/fallback-story-data.ts`:
 
 1. **Story Flow**: Ensure all choice paths work correctly
 2. **State Management**: Verify progress saves and restores properly
-3. **Database Integration**: Test with and without Supabase
-4. **Error Handling**: Test with invalid data and network issues
-5. **Accessibility**: Test with keyboard navigation and screen readers
-6. **Performance**: Ensure smooth animations and fast loading
+3. **Party System**: Test character creation, party management, and extensible features
+4. **Database Integration**: Test with and without Supabase
+5. **Error Handling**: Test with invalid data and network issues
+6. **Accessibility**: Test with keyboard navigation and screen readers
+7. **Performance**: Ensure smooth animations and fast loading
 
 ### Adding Tests
 
@@ -269,6 +362,24 @@ describe('GameStateManager', () => {
   
   it('should handle inventory updates', () => {
     // Test implementation
+  })
+  
+  it('should create party members with correct attributes', () => {
+    // Test party creation
+  })
+  
+  it('should support extensible character attributes', () => {
+    // Test character model extensibility
+  })
+})
+
+describe('Party System', () => {
+  it('should create valid party configurations', () => {
+    // Test party creation
+  })
+  
+  it('should enforce party size limits', () => {
+    // Test validation
   })
 })
 ```
