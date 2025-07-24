@@ -146,6 +146,121 @@ CREATE TABLE user_accounts (
 - `created_at`: Timestamp when the account was created
 - `updated_at`: Timestamp when the account was last modified
 
+## Party System Tables (Optional Migration)
+
+The following tables support the advanced party creation system. These are created by running `scripts/party-system-migration.sql`.
+
+### `party_member_classes`
+
+Stores predefined character classes available for party creation.
+
+```sql
+CREATE TABLE party_member_classes (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  abilities JSONB NOT NULL DEFAULT '[]',
+  base_stats JSONB NOT NULL DEFAULT '{}',
+  model_version INTEGER DEFAULT 1,
+  extended_attributes JSONB DEFAULT '{}',
+  attribute_schema JSONB DEFAULT '{}',
+  relationship_types JSONB DEFAULT '[]',
+  trait_categories JSONB DEFAULT '[]',
+  extension_data JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+**Columns:**
+- `id`: Unique class identifier (e.g., 'barbarian', 'mage')
+- `name`: Display name of the class
+- `description`: Class description for players
+- `abilities`: Array of class-specific abilities
+- `base_stats`: Default statistics for the class
+- `model_version`: Version for extensible character model compatibility
+- `extended_attributes`: Extensible attributes specific to this class
+- `attribute_schema`: Schema defining available attributes for the class
+- `relationship_types`: Types of relationships this class can form
+- `trait_categories`: Available trait categories for this class
+- `extension_data`: Future extension point
+- `is_active`: Whether this class is available for selection
+
+### `party_configurations`
+
+Stores party setups linked to user sessions and stories.
+
+```sql
+CREATE TABLE party_configurations (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  session_id TEXT REFERENCES user_sessions(id) ON DELETE CASCADE,
+  story_id TEXT REFERENCES stories(id) ON DELETE CASCADE,
+  formation TEXT,
+  max_size INTEGER NOT NULL DEFAULT 4,
+  model_version INTEGER DEFAULT 1,
+  party_traits JSONB DEFAULT '{}',
+  dynamics JSONB DEFAULT '{}',
+  extension_data JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(session_id, story_id)
+);
+```
+
+**Columns:**
+- `id`: Unique party configuration identifier
+- `session_id`: Foreign key to user session
+- `story_id`: Foreign key to story this party is for
+- `formation`: Party formation preference
+- `max_size`: Maximum number of party members (default: 4)
+- `model_version`: Version for extensible party model compatibility
+- `party_traits`: Party-wide traits and bonuses
+- `dynamics`: Party cohesion and specialization data
+- `extension_data`: Future extension point
+
+### `party_members`
+
+Stores individual party members within configurations.
+
+```sql
+CREATE TABLE party_members (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  party_configuration_id TEXT NOT NULL REFERENCES party_configurations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  class_id TEXT NOT NULL REFERENCES party_member_classes(id),
+  level INTEGER NOT NULL DEFAULT 1,
+  custom_attributes JSONB DEFAULT '{}',
+  member_order INTEGER NOT NULL DEFAULT 0,
+  model_version INTEGER DEFAULT 1,
+  dynamic_attributes JSONB DEFAULT '{}',
+  relationships JSONB DEFAULT '{}',
+  traits JSONB DEFAULT '{}',
+  experience_data JSONB DEFAULT '{}',
+  extension_data JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(party_configuration_id, name)
+);
+```
+
+**Columns:**
+- `id`: Unique party member identifier
+- `party_configuration_id`: Foreign key to party configuration
+- `name`: Character name (unique within party)
+- `class_id`: Foreign key to character class
+- `level`: Character level
+- `custom_attributes`: Legacy custom attributes
+- `member_order`: Display order within party
+- `model_version`: Version for extensible character model compatibility
+- `dynamic_attributes`: Extensible attribute system
+- `relationships`: Inter-character relationships
+- `traits`: Character traits and personality features
+- `experience_data`: Experience and skill progression data
+- `extension_data`: Future extension point
+
 ## Indexes
 
 ```sql
@@ -162,6 +277,14 @@ CREATE INDEX idx_game_states_session_id ON game_states(session_id);
 CREATE INDEX idx_game_states_story_id ON game_states(story_id);
 CREATE INDEX idx_user_accounts_email ON user_accounts(email);
 CREATE INDEX idx_user_accounts_username ON user_accounts(username);
+
+-- Party system indexes (created by party-system-migration.sql)
+CREATE INDEX idx_party_member_classes_active ON party_member_classes(is_active);
+CREATE INDEX idx_party_configurations_session ON party_configurations(session_id);
+CREATE INDEX idx_party_configurations_story ON party_configurations(story_id);
+CREATE INDEX idx_party_members_config ON party_members(party_configuration_id);
+CREATE INDEX idx_party_members_class ON party_members(class_id);
+CREATE INDEX idx_party_members_order ON party_members(party_configuration_id, member_order);
 ```
 
 ## Security (Row Level Security)
@@ -177,6 +300,11 @@ ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_states ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_accounts ENABLE ROW LEVEL SECURITY;
 
+-- Party system tables (added by party-system-migration.sql)
+ALTER TABLE party_member_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE party_configurations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE party_members ENABLE ROW LEVEL SECURITY;
+
 -- Public read access for story content
 CREATE POLICY "Allow public read on stories" ON stories
   FOR SELECT USING (is_active = true);
@@ -187,6 +315,10 @@ CREATE POLICY "Allow public read on story_nodes" ON story_nodes
 CREATE POLICY "Allow public read on choices" ON choices
   FOR SELECT USING (true);
 
+-- Public read access for party classes
+CREATE POLICY "Allow public read on party_member_classes" ON party_member_classes
+  FOR SELECT USING (is_active = true);
+
 -- User-specific access for sessions and game states
 CREATE POLICY "Users can manage their own sessions" ON user_sessions
   FOR ALL USING (true);
@@ -196,6 +328,16 @@ CREATE POLICY "Users can manage their own game states" ON game_states
 
 CREATE POLICY "Users can manage their own accounts" ON user_accounts
   FOR ALL USING (true);
+
+-- User-specific access for party data
+CREATE POLICY "Users can manage their own party configurations" ON party_configurations
+  FOR ALL USING (true);
+
+CREATE POLICY "Users can manage their own party members" ON party_members
+  FOR ALL USING (EXISTS (
+    SELECT 1 FROM party_configurations 
+    WHERE party_configurations.id = party_members.party_configuration_id
+  ));
 ```
 
 ## Environment Variables
@@ -211,14 +353,11 @@ The application uses the `StoryService` class to interact with the database:
 
 ```typescript
 import { StoryService } from '@/lib/story-service'
+import { GameStateManager } from '@/lib/game-state-manager'
 
-// Get all available stories
+// Story management
 const stories = await StoryService.getStories()
-
-// Get a random story
 const randomStory = await StoryService.getRandomStory()
-
-// Get a story node with its choices
 const node = await StoryService.getStoryNode('start', 'mystical-forest')
 
 // Session management
@@ -228,6 +367,18 @@ const session = await StoryService.createSession(sessionId)
 // Game state persistence
 const gameState = await StoryService.saveGameState(sessionId, storyId, nodeId)
 const savedState = await StoryService.getGameState(sessionId, storyId)
+
+// Party management
+const classes = GameStateManager.getAvailablePartyClasses()
+const character = GameStateManager.createPartyMember('Hero', 'barbarian')
+const party = GameStateManager.createPartyConfiguration([character])
+
+// Character extensibility
+const enhanced = GameStateManager.setCharacterAttribute(character, 'magicResistance', 25, {
+  category: 'custom',
+  displayName: 'Magic Resistance'
+})
+const social = GameStateManager.setCharacterTrait(character, 'brave', true, 'personality')
 
 // Health check
 const isHealthy = await StoryService.healthCheck()
@@ -255,6 +406,20 @@ const isHealthy = await StoryService.healthCheck()
 - Original hardcoded story data as fallback
 - Identical user experience in both modes
 
+### Party Creation System (Optional Migration)
+- **Character Classes**: 5 predefined classes with unique abilities and stats
+- **Extensible Character Model**: Dynamic attributes, relationships, and traits
+- **Party Management**: Create and manage parties of 1-4 characters
+- **Database Optimization**: Dedicated tables for better performance and analytics
+- **Backward Compatibility**: Works with or without party system migration
+
 ## Migration from Hardcoded Data
 
 The existing hardcoded story data can be migrated using the provided SQL script. See `scripts/migrate-story-data.sql` for the complete migration.
+
+### Party System Migration (Optional)
+
+For enhanced party management features:
+1. Complete the main migration first (`scripts/migrate-story-data.sql`)
+2. Run the party system migration (`scripts/party-system-migration.sql`)
+3. See [Party Migration Guide](../scripts/PARTY_MIGRATION_README.md) for detailed instructions
