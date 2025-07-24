@@ -201,6 +201,12 @@ export interface PartyConfiguration {
 	extensionData?: { [key: string]: any }
 }
 
+// Extended interface for saved parties
+export interface SavedPartyConfiguration extends PartyConfiguration {
+	id: string
+	partyName: string
+}
+
 export interface ProgressData {
 	visitedScenarios: string[]
 	choiceHistory: ChoiceRecord[]

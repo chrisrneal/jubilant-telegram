@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { PartyMember, PartyMemberClass, PartyConfiguration } from '@/lib/supabase'
+import { useState, useEffect } from 'react'
+import { PartyMember, PartyMemberClass, PartyConfiguration, SavedPartyConfiguration } from '@/lib/supabase'
 import { GameStateManager } from '@/lib/game-state-manager'
+import { PartyService } from '@/lib/party-service'
+import { StoryService } from '@/lib/story-service'
 
 interface PartyCreationProps {
 	onPartyCreated: (party: PartyConfiguration) => void
@@ -21,8 +23,32 @@ export default function PartyCreation({
 	} | null>(null)
 	const [validationErrors, setValidationErrors] = useState<string[]>([])
 	const [isCreating, setIsCreating] = useState(false)
+	const [showSaveOptions, setShowSaveOptions] = useState(false)
+	const [partyName, setPartyName] = useState('')
+	const [shouldSaveParty, setShouldSaveParty] = useState(false)
+	const [savedParties, setSavedParties] = useState<SavedPartyConfiguration[]>([])
+	const [showLoadedParties, setShowLoadedParties] = useState(false)
+	const [isLoadingParties, setIsLoadingParties] = useState(false)
 
 	const availableClasses = GameStateManager.getAvailablePartyClasses()
+
+	// Load saved parties on component mount
+	useEffect(() => {
+		loadSavedParties()
+	}, [])
+
+	const loadSavedParties = async () => {
+		try {
+			setIsLoadingParties(true)
+			const sessionId = StoryService.getOrCreateSessionId()
+			const parties = await PartyService.getSavedParties(sessionId)
+			setSavedParties(parties)
+		} catch (error) {
+			console.error('Error loading saved parties:', error)
+		} finally {
+			setIsLoadingParties(false)
+		}
+	}
 
 	const handleAddMember = () => {
 		if (partyMembers.length >= maxPartySize) {
@@ -99,6 +125,11 @@ export default function PartyCreation({
 			return
 		}
 
+		if (shouldSaveParty && !partyName.trim()) {
+			setValidationErrors(['Party name is required when saving'])
+			return
+		}
+
 		setIsCreating(true)
 		try {
 			const party = GameStateManager.createPartyConfiguration(partyMembers)
@@ -109,12 +140,53 @@ export default function PartyCreation({
 				return
 			}
 
+			// Save party if requested
+			if (shouldSaveParty) {
+				const sessionId = StoryService.getOrCreateSessionId()
+				const saveResult = await PartyService.saveParty(sessionId, party, partyName.trim())
+				
+				if (!saveResult.success) {
+					setValidationErrors([saveResult.error || 'Failed to save party'])
+					return
+				}
+			}
+
 			onPartyCreated(party)
 		} catch (error) {
 			console.error('Error creating party:', error)
 			setValidationErrors(['Failed to create party. Please try again.'])
 		} finally {
 			setIsCreating(false)
+		}
+	}
+
+	const handleLoadSavedParty = async (savedParty: SavedPartyConfiguration) => {
+		try {
+			setIsCreating(true)
+			setValidationErrors([])
+
+			// Load the party members
+			setPartyMembers(savedParty.members)
+			setShowLoadedParties(false)
+
+			// Auto-generate party name if saving
+			if (shouldSaveParty && !partyName) {
+				setPartyName(PartyService.generatePartyName(savedParty))
+			}
+		} catch (error) {
+			console.error('Error loading saved party:', error)
+			setValidationErrors(['Failed to load saved party. Please try again.'])
+		} finally {
+			setIsCreating(false)
+		}
+	}
+
+	const handleToggleSaveParty = () => {
+		setShouldSaveParty(!shouldSaveParty)
+		if (!shouldSaveParty && partyMembers.length > 0) {
+			// Auto-generate party name
+			const party = GameStateManager.createPartyConfiguration(partyMembers)
+			setPartyName(PartyService.generatePartyName(party))
 		}
 	}
 
@@ -222,6 +294,103 @@ export default function PartyCreation({
 				)}
 			</div>
 
+			{/* Load Saved Parties Section */}
+			{savedParties.length > 0 && (
+				<div className="mb-8">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+							Load Saved Party
+						</h2>
+						<button
+							onClick={() => setShowLoadedParties(!showLoadedParties)}
+							className="px-4 py-2 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium rounded-lg transition-colors"
+						>
+							{showLoadedParties ? 'Hide' : 'Show'} Saved Parties ({savedParties.length})
+						</button>
+					</div>
+
+					{showLoadedParties && (
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							{savedParties.map(savedParty => (
+								<div key={savedParty.id} className="p-4 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+									<div className="flex items-start justify-between mb-3">
+										<div>
+											<h3 className="font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
+												{savedParty.partyName}
+											</h3>
+											<p className="text-sm text-zinc-600 dark:text-zinc-400">
+												{savedParty.members.length} members • Created {new Date(savedParty.createdAt).toLocaleDateString()}
+											</p>
+										</div>
+									</div>
+									
+									<div className="mb-3">
+										<p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
+											Party composition:
+										</p>
+										<div className="flex flex-wrap gap-1">
+											{savedParty.members.map((member, index) => (
+												<span 
+													key={index}
+													className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded"
+												>
+													{member.name} ({member.class.name})
+												</span>
+											))}
+										</div>
+									</div>
+
+									<button
+										onClick={() => handleLoadSavedParty(savedParty)}
+										disabled={isCreating}
+										className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium rounded transition-colors"
+									>
+										Load This Party
+									</button>
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			)}
+
+			{/* Save Party Options */}
+			{partyMembers.length > 0 && (
+				<div className="mb-8 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+					<div className="flex items-center mb-3">
+						<input
+							type="checkbox"
+							id="saveParty"
+							checked={shouldSaveParty}
+							onChange={handleToggleSaveParty}
+							className="mr-3 h-4 w-4 text-amber-600 focus:ring-amber-500 border-amber-300 rounded"
+						/>
+						<label htmlFor="saveParty" className="text-amber-800 dark:text-amber-200 font-medium">
+							💾 Save this party for future use
+						</label>
+					</div>
+					
+					{shouldSaveParty && (
+						<div>
+							<label className="block text-sm font-medium text-amber-700 dark:text-amber-300 mb-2">
+								Party Name
+							</label>
+							<input
+								type="text"
+								value={partyName}
+								onChange={(e) => setPartyName(e.target.value)}
+								className="w-full px-3 py-2 border border-amber-300 dark:border-amber-600 rounded-lg bg-white dark:bg-amber-900/20 text-amber-900 dark:text-amber-100 placeholder-amber-500 dark:placeholder-amber-400"
+								placeholder="Enter a name for your party"
+								maxLength={50}
+							/>
+							<p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+								Give your party a memorable name so you can easily find it later.
+							</p>
+						</div>
+					)}
+				</div>
+			)}
+
 			{/* Member Creation/Edit Modal */}
 			{editingMember && (
 				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -321,10 +490,13 @@ export default function PartyCreation({
 				</button>
 				<button
 					onClick={handleCreateParty}
-					disabled={partyMembers.length === 0 || isCreating}
+					disabled={partyMembers.length === 0 || isCreating || (shouldSaveParty && !partyName.trim())}
 					className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium rounded-lg transition-colors"
 				>
-					{isCreating ? 'Creating Party...' : 'Start Adventure'}
+					{isCreating ? 
+						(shouldSaveParty ? 'Saving & Starting...' : 'Creating Party...') : 
+						(shouldSaveParty ? 'Save & Start Adventure' : 'Start Adventure')
+					}
 				</button>
 			</div>
 		</div>
