@@ -71,6 +71,9 @@ export class StoryService {
 				story_id: fallbackNode.storyId,
 				title: fallbackNode.title,
 				text: fallbackNode.text,
+				type: fallbackNode.type || 'narrative', // Default to 'narrative' for backward compatibility
+				npc: fallbackNode.npc,
+				battle: fallbackNode.battle,
 				is_ending: fallbackNode.isEnding || false,
 				choices: fallbackNode.choices.map((choice, index) => ({
 					id: choice.id,
@@ -405,6 +408,9 @@ export class StoryService {
 				story_id: node.storyId,
 				title: node.title,
 				text: node.text,
+				type: node.type || 'narrative', // Default to 'narrative' for backward compatibility
+				npc: node.npc,
+				battle: node.battle,
 				is_ending: node.isEnding || false
 			}))
 		}
