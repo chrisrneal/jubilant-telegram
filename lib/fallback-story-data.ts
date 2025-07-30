@@ -7,11 +7,29 @@ export interface Choice {
 	nextNodeId: string
 }
 
+// Encounter-specific data types (matching Supabase schema)
+export interface NPCEncounterData {
+	npc_name: string
+	npc_description?: string
+	dialogue_options?: string[]
+	relationship_changes?: { [key: string]: number }
+}
+
+export interface BattleEncounterData {
+	enemies: string[]
+	battle_type?: string
+	difficulty?: 'easy' | 'medium' | 'hard'
+	rewards?: { [key: string]: any }
+}
+
 export interface StoryNode {
 	id: string
 	storyId: string
 	title: string
 	text: string
+	type?: 'narrative' | 'npc' | 'battle'
+	npc?: NPCEncounterData
+	battle?: BattleEncounterData
 	choices: Choice[]
 	isEnding?: boolean
 }
